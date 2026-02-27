@@ -118,14 +118,27 @@ function setScreen() {
   loginScreen.classList.toggle('active', !loggedIn);
   appScreen.classList.toggle('active', loggedIn);
   if (loggedIn) welcomeText.textContent = `Здравей, ${appState.user}!`;
+  if (loggedIn) {
+    refreshLeafletMapSizes();
+  }
+}
+
+function refreshLeafletMapSizes(targetTab) {
+  if (mapMode !== 'leaflet') return;
+
+  if ((!targetTab || targetTab === 'timeline') && pickerMap) {
+    setTimeout(() => pickerMap.invalidateSize(), 0);
+  }
+
+  if ((!targetTab || targetTab === 'map') && overviewMap) {
+    setTimeout(() => overviewMap.invalidateSize(), 0);
+  }
 }
 
 function switchTab(targetTab) {
   tabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === targetTab));
   panels.forEach((panel) => panel.classList.toggle('active', panel.id === targetTab));
-  if (targetTab === 'map' && mapMode === 'leaflet' && overviewMap) {
-    setTimeout(() => overviewMap.invalidateSize(), 0);
-  }
+  refreshLeafletMapSizes(targetTab);
 }
 
 function toSetList(values) {
