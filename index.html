@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Спомени+ | Mobile Memories App</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="login-screen" class="screen active">
+        <div class="card">
+          <h1>Спомени+</h1>
+          <p>Събери любимите си моменти на едно място.</p>
+          <form id="login-form" class="stacked-form">
+            <label>
+              Потребител
+              <input type="text" id="username" placeholder="Напр. Dani" required />
+            </label>
+            <label>
+              Парола
+              <input type="password" id="password" placeholder="••••••" required />
+            </label>
+            <button type="submit">Вход</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="app-screen" class="screen">
+        <header class="mobile-header">
+          <div>
+            <h2 id="welcome-text">Здравей!</h2>
+            <small>Запиши нов спомен</small>
+          </div>
+          <button id="logout-btn" class="ghost">Изход</button>
+        </header>
+
+        <nav class="tabs" aria-label="Навигация">
+          <button class="tab-btn active" data-tab="timeline">Timeline</button>
+          <button class="tab-btn" data-tab="map">Map</button>
+          <button class="tab-btn" data-tab="people">People</button>
+          <button class="tab-btn" data-tab="tags">Tags</button>
+        </nav>
+
+        <section id="timeline" class="tab-panel active">
+          <article class="card">
+            <h3>Добави спомен</h3>
+            <form id="memory-form" class="stacked-form">
+              <label>
+                Описание (задължително)
+                <textarea id="memory-text" rows="4" placeholder="Какво се случи?" required></textarea>
+              </label>
+
+              <label>
+                Дата на събитието
+                <input type="date" id="memory-event-date" />
+              </label>
+
+              <label>
+                Предмет (опционално)
+                <input type="text" id="memory-item" placeholder="Напр. фотоапарат, книга" />
+              </label>
+
+              <label>
+                Човек (опционално)
+                <input type="text" id="memory-person" placeholder="Напр. Мария" />
+              </label>
+
+              <label>
+                Локация (опционално)
+                <input type="text" id="memory-location" placeholder="Напр. София, НДК" />
+              </label>
+
+              <label>
+                Тагове (опционално, разделени със запетая)
+                <input type="text" id="memory-tags" placeholder="Напр. пътуване, семейство" />
+              </label>
+
+              <label>
+                Тагове за дейност (опционално)
+                <input type="text" id="memory-activity-tags" placeholder="Напр. разходка, снимане" />
+              </label>
+
+              <label>
+                Тагове за емоция (опционално)
+                <input type="text" id="memory-emotion-tags" placeholder="Напр. радост, спокойствие" />
+              </label>
+
+              <div class="map-picker-wrap">
+                <div class="card-heading-with-action">
+                  <strong>Пин на карта (опционално)</strong>
+                  <button type="button" id="clear-pin" class="ghost tiny">Изчисти пин</button>
+                </div>
+                <div id="memory-pin-picker" class="map-board" aria-label="Избери пин"></div>
+                <small id="memory-pin-coords" class="hint">Няма избран пин.</small>
+              </div>
+
+              <label>
+                Снимки / Видео (опционално)
+                <input type="file" id="memory-media" accept="image/*,video/*" multiple />
+              </label>
+
+              <button type="submit">Запази спомен</button>
+            </form>
+          </article>
+
+          <article class="card">
+            <div class="card-heading-with-action">
+              <h3>Timeline</h3>
+              <button type="button" id="clear-tag-filter" class="ghost tiny hidden">Изчисти филтър</button>
+            </div>
+            <p id="active-tag-info" class="hint hidden"></p>
+            <ul id="timeline-list" class="memory-list"></ul>
+          </article>
+        </section>
+
+        <section id="map" class="tab-panel">
+          <article class="card">
+            <h3>Карта на спомените</h3>
+            <p class="hint">Всички пинове, отбелязани до момента:</p>
+            <div id="map-board" class="map-board"></div>
+            <ul id="map-pins-list" class="memory-list compact"></ul>
+          </article>
+        </section>
+
+        <section id="people" class="tab-panel">
+          <article class="card">
+            <h3>People</h3>
+            <p class="hint">Добави човек и снимка (по желание).</p>
+            <form id="people-form" class="stacked-form compact-form">
+              <label>
+                Име
+                <input type="text" id="people-name" placeholder="Напр. Мария" required />
+              </label>
+              <label>
+                Снимка
+                <input type="file" id="people-photo" accept="image/*" />
+              </label>
+              <button type="submit">Добави човек</button>
+            </form>
+            <ul id="people-list" class="people-list"></ul>
+          </article>
+        </section>
+
+        <section id="tags" class="tab-panel">
+          <article class="card">
+            <h3>Tags</h3>
+            <p class="hint">Избери таг, за да отидеш към свързаните спомени.</p>
+            <ul id="tags-list" class="pill-list"></ul>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <template id="memory-item-template">
+      <li class="memory-item">
+        <header>
+          <strong class="event-date"></strong>
+          <small class="location"></small>
+        </header>
+        <p class="text"></p>
+        <small class="person"></small>
+        <small class="item"></small>
+        <div class="memory-tags"></div>
+        <small class="media-count"></small>
+      </li>
+    </template>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="app.js"></script>
+  </body>
+</html>
