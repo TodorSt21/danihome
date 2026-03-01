@@ -37,13 +37,14 @@
         </header>
 
         <nav class="tabs" aria-label="Навигация">
-          <button class="tab-btn active" data-tab="timeline">Timeline</button>
+          <button class="tab-btn active" data-tab="create-memory">Добави спомен</button>
+          <button class="tab-btn" data-tab="timeline">Timeline</button>
           <button class="tab-btn" data-tab="map">Map</button>
           <button class="tab-btn" data-tab="people">People</button>
           <button class="tab-btn" data-tab="tags">Tags</button>
         </nav>
 
-        <section id="timeline" class="tab-panel active">
+        <section id="create-memory" class="tab-panel active">
           <article class="card">
             <h3>Добави спомен</h3>
             <form id="memory-form" class="stacked-form">
@@ -104,7 +105,9 @@
               <button type="submit">Запази спомен</button>
             </form>
           </article>
+        </section>
 
+        <section id="timeline" class="tab-panel">
           <article class="card">
             <div class="card-heading-with-action">
               <h3>Timeline</h3>
@@ -125,7 +128,7 @@
         </section>
 
         <section id="people" class="tab-panel">
-          <article class="card">
+          <article id="people-overview-card" class="card">
             <h3>People</h3>
             <p class="hint">Добави човек и снимка (по желание).</p>
             <form id="people-form" class="stacked-form compact-form">
@@ -140,6 +143,22 @@
               <button type="submit">Добави човек</button>
             </form>
             <ul id="people-list" class="people-list"></ul>
+          </article>
+
+          <article id="person-detail-card" class="card hidden">
+            <div class="card-heading-with-action">
+              <h3>Профил на човек</h3>
+              <button type="button" id="person-detail-back" class="ghost tiny">Назад</button>
+            </div>
+            <div class="person-detail-header">
+              <img id="person-detail-avatar" class="person-avatar large" alt="" />
+              <div>
+                <strong id="person-detail-name"></strong>
+                <p id="person-detail-meta" class="hint"></p>
+              </div>
+            </div>
+            <h4>Свързани спомени</h4>
+            <ul id="person-detail-memories" class="memory-list compact"></ul>
           </article>
         </section>
 

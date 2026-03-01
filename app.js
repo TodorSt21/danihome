@@ -11,6 +11,13 @@ const memoryForm = document.querySelector('#memory-form');
 const peopleForm = document.querySelector('#people-form');
 const timelineList = document.querySelector('#timeline-list');
 const peopleList = document.querySelector('#people-list');
+const peopleOverviewCard = document.querySelector('#people-overview-card');
+const personDetailCard = document.querySelector('#person-detail-card');
+const personDetailBackBtn = document.querySelector('#person-detail-back');
+const personDetailAvatar = document.querySelector('#person-detail-avatar');
+const personDetailName = document.querySelector('#person-detail-name');
+const personDetailMeta = document.querySelector('#person-detail-meta');
+const personDetailMemories = document.querySelector('#person-detail-memories');
 const tagsList = document.querySelector('#tags-list');
 const mapPinsList = document.querySelector('#map-pins-list');
 const memoryTemplate = document.querySelector('#memory-item-template');
@@ -42,6 +49,7 @@ let appState = {
   people: [],
   activeTag: null,
   draftPin: null,
+  selectedPerson: null,
 };
 
 let mapMode = 'fallback';
@@ -60,6 +68,7 @@ function loadState() {
       user: parsed.user || null,
       activeTag: null,
       draftPin: null,
+      selectedPerson: null,
       people: Array.isArray(parsed.people)
         ? parsed.people.map((person) => ({
             name: person?.name || '',
@@ -79,7 +88,7 @@ function loadState() {
         : [],
     };
   } catch {
-    appState = { user: null, memories: [], people: [], activeTag: null, draftPin: null };
+    appState = { user: null, memories: [], people: [], activeTag: null, draftPin: null, selectedPerson: null };
   }
 }
 
@@ -126,7 +135,7 @@ function setScreen() {
 function refreshLeafletMapSizes(targetTab) {
   if (mapMode !== 'leaflet') return;
 
-  if ((!targetTab || targetTab === 'timeline') && pickerMap) {
+  if ((!targetTab || targetTab === 'create-memory') && pickerMap) {
     setTimeout(() => pickerMap.invalidateSize(), 0);
   }
 
@@ -303,6 +312,53 @@ function getPersonPhoto(name) {
   return found?.photoDataUrl || '';
 }
 
+
+function getMemoriesForPerson(name) {
+  const lower = name.trim().toLowerCase();
+  return sortByEventDateDesc(appState.memories).filter((memory) => memory.person.trim().toLowerCase() === lower);
+}
+
+function openPersonDetail(name) {
+  appState.selectedPerson = name;
+  renderPersonDetail();
+}
+
+function renderPersonDetail() {
+  if (!appState.selectedPerson) {
+    peopleOverviewCard.classList.remove('hidden');
+    personDetailCard.classList.add('hidden');
+    return;
+  }
+
+  const selectedName = appState.selectedPerson;
+  const relatedMemories = getMemoriesForPerson(selectedName);
+  peopleOverviewCard.classList.add('hidden');
+  personDetailCard.classList.remove('hidden');
+
+  const photo = getPersonPhoto(selectedName);
+  personDetailAvatar.src =
+    photo ||
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%25" height="100%25" fill="%23dfe8ff"/><text x="50%25" y="54%25" dominant-baseline="middle" text-anchor="middle" font-size="28">👤</text></svg>';
+  personDetailAvatar.alt = `Снимка на ${selectedName}`;
+  personDetailName.textContent = selectedName;
+  personDetailMeta.textContent = `Общо спомени: ${relatedMemories.length}`;
+
+  personDetailMemories.innerHTML = '';
+  relatedMemories.forEach((memory) => {
+    const li = document.createElement('li');
+    li.className = 'memory-item';
+    li.innerHTML = `<strong>🗓️ ${formatEventDate(memory.eventDate)}</strong><p>${memory.text}</p><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small>`;
+    personDetailMemories.appendChild(li);
+  });
+
+  if (!relatedMemories.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-state';
+    li.textContent = 'Няма добавени спомени за този човек.';
+    personDetailMemories.appendChild(li);
+  }
+}
+
 function renderTimeline() {
   timelineList.innerHTML = '';
   const sortedMemories = sortByEventDateDesc(appState.memories).filter(passesTagFilter);
@@ -345,6 +401,8 @@ function renderPeople() {
   allNames.forEach((name) => {
     const li = document.createElement('li');
     li.className = 'person-card';
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
 
     const img = document.createElement('img');
     img.className = 'person-avatar';
@@ -356,6 +414,13 @@ function renderPeople() {
     caption.textContent = name;
 
     li.append(img, caption);
+    li.addEventListener('click', () => openPersonDetail(name));
+    li.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openPersonDetail(name);
+      }
+    });
     peopleList.appendChild(li);
   });
 
@@ -403,6 +468,7 @@ function render() {
   renderFilterState();
   renderTimeline();
   renderPeople();
+  renderPersonDetail();
   renderTags();
   renderDraftPin();
   renderMapPins();
@@ -430,6 +496,7 @@ loginForm.addEventListener('submit', (event) => {
 logoutBtn.addEventListener('click', () => {
   appState.user = null;
   appState.activeTag = null;
+  appState.selectedPerson = null;
   saveState();
   setScreen();
 });
@@ -444,7 +511,19 @@ clearPinBtn.addEventListener('click', () => {
   renderDraftPin();
 });
 
-tabButtons.forEach((btn) => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+personDetailBackBtn.addEventListener('click', () => {
+  appState.selectedPerson = null;
+  renderPersonDetail();
+});
+
+tabButtons.forEach((btn) =>
+  btn.addEventListener('click', () => {
+    if (btn.dataset.tab !== 'people') {
+      appState.selectedPerson = null;
+    }
+    switchTab(btn.dataset.tab);
+  }),
+);
 
 peopleForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -471,6 +550,7 @@ peopleForm.addEventListener('submit', async (event) => {
 
   saveState();
   renderPeople();
+  renderPersonDetail();
   peopleForm.reset();
 });
 
@@ -505,6 +585,7 @@ memoryForm.addEventListener('submit', (event) => {
   appState.draftPin = null;
   saveState();
   render();
+  switchTab('timeline');
   memoryForm.reset();
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 });
@@ -513,5 +594,5 @@ loadState();
 setScreen();
 initMaps();
 render();
-switchTab('timeline');
+switchTab('create-memory');
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
