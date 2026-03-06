@@ -23,6 +23,11 @@ const mapPinsList = document.querySelector('#map-pins-list');
 const memoryTemplate = document.querySelector('#memory-item-template');
 const activeTagInfo = document.querySelector('#active-tag-info');
 const clearTagFilterBtn = document.querySelector('#clear-tag-filter');
+const statsGrid = document.querySelector('#stats-grid');
+const homeRecentList = document.querySelector('#home-recent-list');
+const memoryMediaInput = document.querySelector('#memory-media');
+const memoryMediaPreview = document.querySelector('#memory-media-preview');
+const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
 
 const memoryPinPickerEl = document.querySelector('#memory-pin-picker');
 const mapBoardEl = document.querySelector('#map-board');
@@ -185,6 +190,68 @@ function formatEventDate(dateValue) {
 
 function sortByEventDateDesc(memories) {
   return [...memories].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+}
+
+
+function monthLabel(dateValue) {
+  return new Date(dateValue).toLocaleDateString('bg-BG', { month: 'long', year: 'numeric' });
+}
+
+function renderHomeSummary() {
+  if (!statsGrid || !homeRecentList) return;
+
+  const uniquePlaces = new Set(appState.memories.map((memory) => memory.location.trim()).filter(Boolean));
+  const photosCount = appState.memories.reduce((sum, memory) => sum + (memory.mediaCount || 0), 0);
+  const uniquePeople = new Set(appState.people.map((person) => person.name.trim().toLowerCase()).filter(Boolean));
+  appState.memories.forEach((memory) => {
+    const normalized = memory.person.trim().toLowerCase();
+    if (normalized) uniquePeople.add(normalized);
+  });
+
+  const stats = [
+    { label: 'Memories', value: appState.memories.length },
+    { label: 'People', value: uniquePeople.size },
+    { label: 'Places', value: uniquePlaces.size },
+    { label: 'Photos', value: photosCount },
+  ];
+
+  statsGrid.innerHTML = '';
+  stats.forEach((stat) => {
+    const card = document.createElement('article');
+    card.className = 'stat-card';
+    card.innerHTML = `<small class="hint">${stat.label}</small><strong>${stat.value}</strong>`;
+    statsGrid.appendChild(card);
+  });
+
+  homeRecentList.innerHTML = '';
+  sortByEventDateDesc(appState.memories)
+    .slice(0, 3)
+    .forEach((memory) => {
+      const li = document.createElement('li');
+      li.className = 'memory-item';
+      li.innerHTML = `<header><strong>${memory.text.slice(0, 48)}</strong><small>${formatEventDate(memory.eventDate)}</small></header><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small>`;
+      homeRecentList.appendChild(li);
+    });
+
+  if (!homeRecentList.children.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-state';
+    li.textContent = 'Все още няма добавени спомени.';
+    homeRecentList.appendChild(li);
+  }
+}
+
+function renderMediaPreview() {
+  if (!memoryMediaPreview || !memoryMediaInput) return;
+  memoryMediaPreview.innerHTML = '';
+  [...memoryMediaInput.files].slice(0, 6).forEach((file) => {
+    if (!file.type.startsWith('image/')) return;
+    const img = document.createElement('img');
+    img.className = 'media-preview-item';
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+    memoryMediaPreview.appendChild(img);
+  });
 }
 
 function addFallbackPin(container, x, y, title) {
@@ -362,8 +429,18 @@ function renderPersonDetail() {
 function renderTimeline() {
   timelineList.innerHTML = '';
   const sortedMemories = sortByEventDateDesc(appState.memories).filter(passesTagFilter);
+  let lastGroup = '';
 
   sortedMemories.forEach((memory) => {
+    const currentGroup = monthLabel(memory.eventDate);
+    if (currentGroup != lastGroup) {
+      const groupLabel = document.createElement('li');
+      groupLabel.className = 'timeline-group-label';
+      groupLabel.textContent = currentGroup;
+      timelineList.appendChild(groupLabel);
+      lastGroup = currentGroup;
+    }
+
     const clone = memoryTemplate.content.cloneNode(true);
     clone.querySelector('.event-date').textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
     clone.querySelector('.location').textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
@@ -413,7 +490,10 @@ function renderPeople() {
     const caption = document.createElement('span');
     caption.textContent = name;
 
-    li.append(img, caption);
+    const memoryCount = document.createElement('small');
+    memoryCount.textContent = `${getMemoriesForPerson(name).length} спомена`;
+
+    li.append(img, caption, memoryCount);
     li.addEventListener('click', () => openPersonDetail(name));
     li.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -466,6 +546,7 @@ function renderFilterState() {
 
 function render() {
   renderFilterState();
+  renderHomeSummary();
   renderTimeline();
   renderPeople();
   renderPersonDetail();
@@ -509,6 +590,14 @@ clearTagFilterBtn.addEventListener('click', () => {
 clearPinBtn.addEventListener('click', () => {
   appState.draftPin = null;
   renderDraftPin();
+});
+
+memoryMediaInput.addEventListener('change', () => {
+  renderMediaPreview();
+});
+
+fabAddMemoryBtn.addEventListener('click', () => {
+  switchTab('create-memory');
 });
 
 personDetailBackBtn.addEventListener('click', () => {
@@ -587,6 +676,7 @@ memoryForm.addEventListener('submit', (event) => {
   render();
   switchTab('timeline');
   memoryForm.reset();
+  renderMediaPreview();
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 });
 

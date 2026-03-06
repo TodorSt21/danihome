@@ -44,3 +44,9 @@ python3 -m http.server 4173
 После отвори:
 - `http://localhost:4173` (локално)
 - или `http://<IP-на-машината>:4173` от друго устройство в същата мрежа.
+
+
+## UI / Design system
+- Добавен е глобален дизайн систем файл: `styles/design-system.css` (цветове, радиуси, сенки).
+- Основният интерфейс е обновен с bottom navigation, floating action button и card-based mobile layout.
+- Home екранът включва статистики и recent memories секция, без промяна на data логиката.

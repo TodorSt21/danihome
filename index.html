@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Спомени+ | Mobile Memories App</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="styles/design-system.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app-shell">
-      <section id="login-screen" class="screen active">
-        <div class="card">
-          <h1>Спомени+</h1>
-          <p>Събери любимите си моменти на едно място.</p>
+      <section id="login-screen" class="screen active login-screen-layout">
+        <div class="card login-card">
+          <div class="logo-badge">📸</div>
+          <h1>DaniHome</h1>
+          <p class="hint">Your life memories</p>
           <form id="login-form" class="stacked-form">
             <label>
               Потребител
@@ -31,20 +33,30 @@
         <header class="mobile-header">
           <div>
             <h2 id="welcome-text">Здравей!</h2>
-            <small>Запиши нов спомен</small>
+            <small>Your life memories</small>
           </div>
           <button id="logout-btn" class="ghost">Изход</button>
         </header>
 
         <nav class="tabs" aria-label="Навигация">
-          <button class="tab-btn active" data-tab="create-memory">Добави спомен</button>
-          <button class="tab-btn" data-tab="timeline">Timeline</button>
-          <button class="tab-btn" data-tab="map">Map</button>
-          <button class="tab-btn" data-tab="people">People</button>
-          <button class="tab-btn" data-tab="tags">Tags</button>
+          <button class="tab-btn active" data-tab="create-memory"><span class="tab-icon">🏠</span><span>Home</span></button>
+          <button class="tab-btn" data-tab="timeline"><span class="tab-icon">🕒</span><span>Timeline</span></button>
+          <button class="tab-btn" data-tab="map"><span class="tab-icon">🗺️</span><span>Map</span></button>
+          <button class="tab-btn" data-tab="people"><span class="tab-icon">👥</span><span>People</span></button>
+          <button class="tab-btn" data-tab="tags"><span class="tab-icon">#</span><span>Tags</span></button>
         </nav>
 
         <section id="create-memory" class="tab-panel active">
+          <article class="card">
+            <h3>Home</h3>
+            <div id="stats-grid" class="stats-grid"></div>
+          </article>
+
+          <article class="card">
+            <h3>Recent memories</h3>
+            <ul id="home-recent-list" class="memory-list compact"></ul>
+          </article>
+
           <article class="card">
             <h3>Добави спомен</h3>
             <form id="memory-form" class="stacked-form">
@@ -101,6 +113,7 @@
                 Снимки / Видео (опционално)
                 <input type="file" id="memory-media" accept="image/*,video/*" multiple />
               </label>
+              <div id="memory-media-preview" class="media-preview-grid"></div>
 
               <button type="submit">Запази спомен</button>
             </form>
@@ -114,7 +127,7 @@
               <button type="button" id="clear-tag-filter" class="ghost tiny hidden">Изчисти филтър</button>
             </div>
             <p id="active-tag-info" class="hint hidden"></p>
-            <ul id="timeline-list" class="memory-list"></ul>
+            <ul id="timeline-list" class="memory-list timeline-list"></ul>
           </article>
         </section>
 
@@ -169,6 +182,8 @@
             <ul id="tags-list" class="pill-list"></ul>
           </article>
         </section>
+
+        <button id="fab-add-memory" class="fab" type="button" aria-label="Добави спомен">＋</button>
       </section>
     </main>
 
