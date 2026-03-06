@@ -38,7 +38,7 @@
           <button id="logout-btn" class="ghost">Изход</button>
         </header>
 
-        <nav class="tabs" aria-label="Навигация">
+        <nav class="tabs bottom-nav" aria-label="Навигация">
           <button class="tab-btn active" data-tab="create-memory"><span class="tab-icon">🏠</span><span>Home</span></button>
           <button class="tab-btn" data-tab="timeline"><span class="tab-icon">🕒</span><span>Timeline</span></button>
           <button class="tab-btn" data-tab="map"><span class="tab-icon">🗺️</span><span>Map</span></button>
@@ -188,16 +188,17 @@
     </main>
 
     <template id="memory-item-template">
-      <li class="memory-item">
-        <header>
-          <strong class="event-date"></strong>
+      <li class="memory-item memory-card">
+        <img class="memory-photo" alt="Снимка на спомен" />
+        <div class="memory-card-body">
+          <strong class="text"></strong>
           <small class="location"></small>
-        </header>
-        <p class="text"></p>
-        <small class="person"></small>
-        <small class="item"></small>
-        <div class="memory-tags"></div>
-        <small class="media-count"></small>
+          <small class="event-date"></small>
+          <small class="person"></small>
+          <small class="item"></small>
+          <div class="memory-tags"></div>
+          <small class="media-count"></small>
+        </div>
       </li>
     </template>
 

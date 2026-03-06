@@ -188,6 +188,13 @@ function formatEventDate(dateValue) {
   return new Date(dateValue).toLocaleDateString('bg-BG');
 }
 
+
+function getMemoryCover(memory) {
+  const personPhoto = memory.person ? getPersonPhoto(memory.person) : '';
+  if (personPhoto) return personPhoto;
+  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="%236366f1"/><stop offset="1" stop-color="%2322c55e"/></linearGradient></defs><rect width="100%25" height="100%25" fill="url(%23g)"/><text x="50%25" y="52%25" font-size="42" text-anchor="middle" fill="white" font-family="Inter,Arial,sans-serif">Memory</text></svg>';
+}
+
 function sortByEventDateDesc(memories) {
   return [...memories].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
 }
@@ -228,8 +235,8 @@ function renderHomeSummary() {
     .slice(0, 3)
     .forEach((memory) => {
       const li = document.createElement('li');
-      li.className = 'memory-item';
-      li.innerHTML = `<header><strong>${memory.text.slice(0, 48)}</strong><small>${formatEventDate(memory.eventDate)}</small></header><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small>`;
+      li.className = 'memory-item memory-card';
+      li.innerHTML = `<img class="memory-photo" src="${getMemoryCover(memory)}" alt="Снимка на спомен" /><div class="memory-card-body"><strong>${memory.text.slice(0, 48)}</strong><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small><small>🗓️ ${formatEventDate(memory.eventDate)}</small></div>`;
       homeRecentList.appendChild(li);
     });
 
@@ -442,6 +449,7 @@ function renderTimeline() {
     }
 
     const clone = memoryTemplate.content.cloneNode(true);
+    clone.querySelector('.memory-photo').src = getMemoryCover(memory);
     clone.querySelector('.event-date').textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
     clone.querySelector('.location').textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
     clone.querySelector('.text').textContent = memory.text;
