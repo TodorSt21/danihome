@@ -195,8 +195,17 @@ function getMemoryCover(memory) {
   return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="%236366f1"/><stop offset="1" stop-color="%2322c55e"/></linearGradient></defs><rect width="100%25" height="100%25" fill="url(%23g)"/><text x="50%25" y="52%25" font-size="42" text-anchor="middle" fill="white" font-family="Inter,Arial,sans-serif">Memory</text></svg>';
 }
 
+function toEventDateTimestamp(memory) {
+  const sourceDate = String(memory.eventDate || memory.createdAt || '').trim();
+  if (!sourceDate) return 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)) {
+    return Date.parse(`${sourceDate}T00:00:00`);
+  }
+  return Date.parse(sourceDate);
+}
+
 function sortByEventDateDesc(memories) {
-  return [...memories].sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+  return [...memories].sort((a, b) => toEventDateTimestamp(b) - toEventDateTimestamp(a));
 }
 
 
@@ -579,6 +588,7 @@ loginForm.addEventListener('submit', (event) => {
   appState.user = username;
   saveState();
   setScreen();
+  switchTab('create-memory');
   render();
 });
 
@@ -588,6 +598,7 @@ logoutBtn.addEventListener('click', () => {
   appState.selectedPerson = null;
   saveState();
   setScreen();
+  switchTab('create-memory');
 });
 
 clearTagFilterBtn.addEventListener('click', () => {
