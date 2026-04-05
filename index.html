@@ -3,127 +3,170 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Спомени+ | Mobile Memories App</title>
+    <title>DaniHome | Спомени</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <link rel="stylesheet" href="styles/design-system.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app-shell">
+
+      <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
       <section id="login-screen" class="screen active login-screen-layout">
         <div class="card login-card">
           <div class="logo-badge">📸</div>
           <h1>DaniHome</h1>
-          <p class="hint">Your life memories</p>
+          <p class="hint">Твоите лични спомени</p>
           <form id="login-form" class="stacked-form">
             <label>
               Потребител
-              <input type="text" id="username" placeholder="Напр. Dani" required />
+              <input type="text" id="username" placeholder="Напр. Dani" required autocomplete="username" />
             </label>
             <label>
               Парола
-              <input type="password" id="password" placeholder="••••••" required />
+              <input type="password" id="password" placeholder="••••••" required autocomplete="current-password" />
             </label>
-            <button type="submit">Вход</button>
+            <button type="submit" class="btn-primary">Влез</button>
           </form>
         </div>
       </section>
 
+      <!-- ── APP SCREEN ────────────────────────────────────────────── -->
       <section id="app-screen" class="screen">
+
         <header class="mobile-header">
           <div>
             <h2 id="welcome-text">Здравей!</h2>
-            <small>Your life memories</small>
+            <small class="hint">DaniHome</small>
           </div>
-          <button id="logout-btn" class="ghost">Изход</button>
+          <button id="logout-btn" class="ghost tiny">Изход</button>
         </header>
 
         <nav class="tabs bottom-nav" aria-label="Навигация">
           <button class="tab-btn active" data-tab="create-memory"><span class="tab-icon">🏠</span><span>Home</span></button>
           <button class="tab-btn" data-tab="timeline"><span class="tab-icon">🕒</span><span>Timeline</span></button>
-          <button class="tab-btn" data-tab="map"><span class="tab-icon">🗺️</span><span>Map</span></button>
-          <button class="tab-btn" data-tab="people"><span class="tab-icon">👥</span><span>People</span></button>
-          <button class="tab-btn" data-tab="tags"><span class="tab-icon">#</span><span>Tags</span></button>
+          <button class="tab-btn" data-tab="map"><span class="tab-icon">🗺️</span><span>Карта</span></button>
+          <button class="tab-btn" data-tab="people"><span class="tab-icon">👥</span><span>Хора</span></button>
+          <button class="tab-btn" data-tab="tags"><span class="tab-icon">#</span><span>Тагове</span></button>
         </nav>
 
+        <!-- ── HOME TAB ──────────────────────────────────────────── -->
         <section id="create-memory" class="tab-panel active">
-          <article class="card">
-            <h3>Home</h3>
-            <div id="stats-grid" class="stats-grid"></div>
-          </article>
 
-          <article class="card">
-            <h3>Recent memories</h3>
-            <ul id="home-recent-list" class="memory-list compact"></ul>
-          </article>
+          <!-- Dashboard view (default) -->
+          <div id="home-dashboard">
 
-          <article class="card">
-            <h3>Добави спомен</h3>
-            <form id="memory-form" class="stacked-form">
-              <label>
-                Описание (задължително)
-                <textarea id="memory-text" rows="4" placeholder="Какво се случи?" required></textarea>
-              </label>
+            <article class="card stats-card">
+              <div id="stats-grid" class="stats-grid"></div>
+            </article>
 
-              <label>
-                Дата на събитието
-                <input type="date" id="memory-event-date" />
-              </label>
-
-              <label>
-                Предмет (опционално)
-                <input type="text" id="memory-item" placeholder="Напр. фотоапарат, книга" />
-              </label>
-
-              <label>
-                Човек (опционално)
-                <input type="text" id="memory-person" placeholder="Напр. Мария" />
-              </label>
-
-              <label>
-                Локация (опционално)
-                <input type="text" id="memory-location" placeholder="Напр. София, НДК" />
-              </label>
-
-              <label>
-                Тагове (опционално, разделени със запетая)
-                <input type="text" id="memory-tags" placeholder="Напр. пътуване, семейство" />
-              </label>
-
-              <label>
-                Тагове за дейност (опционално)
-                <input type="text" id="memory-activity-tags" placeholder="Напр. разходка, снимане" />
-              </label>
-
-              <label>
-                Тагове за емоция (опционално)
-                <input type="text" id="memory-emotion-tags" placeholder="Напр. радост, спокойствие" />
-              </label>
-
-              <div class="map-picker-wrap">
-                <div class="card-heading-with-action">
-                  <strong>Пин на карта (опционално)</strong>
-                  <button type="button" id="clear-pin" class="ghost tiny">Изчисти пин</button>
-                </div>
-                <div id="memory-pin-picker" class="map-board" aria-label="Избери пин"></div>
-                <small id="memory-pin-coords" class="hint">Няма избран пин.</small>
+            <article class="card">
+              <h3 class="section-title">Разгледай</h3>
+              <div class="quick-nav-grid">
+                <button class="quick-nav-item" data-nav="timeline">
+                  <span class="quick-nav-icon">🕒</span>
+                  <span>Timeline</span>
+                </button>
+                <button class="quick-nav-item" data-nav="tags">
+                  <span class="quick-nav-icon">#</span>
+                  <span>Тагове</span>
+                </button>
+                <button class="quick-nav-item" data-nav="people">
+                  <span class="quick-nav-icon">👥</span>
+                  <span>Хора</span>
+                </button>
+                <button class="quick-nav-item" data-nav="map">
+                  <span class="quick-nav-icon">🗺️</span>
+                  <span>Карта</span>
+                </button>
               </div>
+            </article>
 
-              <label>
-                Снимки / Видео (опционално)
-                <input type="file" id="memory-media" accept="image/*,video/*" multiple />
-              </label>
-              <div id="memory-media-preview" class="media-preview-grid"></div>
+            <article class="card">
+              <div class="card-heading-with-action">
+                <h3 class="section-title">Последни спомени</h3>
+                <button type="button" class="ghost tiny" id="show-all-timeline-btn">Всички</button>
+              </div>
+              <ul id="home-recent-list" class="memory-list compact"></ul>
+            </article>
 
-              <button type="submit">Запази спомен</button>
-            </form>
-          </article>
+          </div>
+
+          <!-- Add Memory Form (hidden by default) -->
+          <div id="home-add-form" class="hidden">
+            <article class="card">
+              <div class="card-heading-with-action">
+                <h3 class="section-title">Добави спомен</h3>
+                <button type="button" id="home-form-back" class="ghost tiny">← Назад</button>
+              </div>
+              <form id="memory-form" class="stacked-form">
+                <label>
+                  Описание <span class="required-mark">*</span>
+                  <textarea id="memory-text" rows="3" placeholder="Какво се случи?" required></textarea>
+                </label>
+
+                <label>
+                  Дата на събитието
+                  <input type="date" id="memory-event-date" />
+                </label>
+
+                <label>
+                  Предмет <span class="field-hint">(опционално)</span>
+                  <input type="text" id="memory-item" placeholder="Напр. фотоапарат, книга" />
+                </label>
+
+                <label>
+                  Човек <span class="field-hint">(опционално)</span>
+                  <input type="text" id="memory-person" placeholder="Напр. Мария" />
+                </label>
+
+                <label>
+                  Локация <span class="field-hint">(опционално)</span>
+                  <input type="text" id="memory-location" placeholder="Напр. София, НДК" />
+                </label>
+
+                <label>
+                  Тагове <span class="field-hint">(разделени със запетая)</span>
+                  <input type="text" id="memory-tags" placeholder="Напр. пътуване, семейство" />
+                </label>
+
+                <label>
+                  Тагове за дейност
+                  <input type="text" id="memory-activity-tags" placeholder="Напр. разходка, снимане" />
+                </label>
+
+                <label>
+                  Тагове за емоция
+                  <input type="text" id="memory-emotion-tags" placeholder="Напр. радост, спокойствие" />
+                </label>
+
+                <div class="map-picker-wrap">
+                  <div class="card-heading-with-action">
+                    <strong class="field-label">Пин на карта <span class="field-hint">(опционално)</span></strong>
+                    <button type="button" id="clear-pin" class="ghost tiny">Изчисти</button>
+                  </div>
+                  <div id="memory-pin-picker" class="map-board" aria-label="Избери пин"></div>
+                  <small id="memory-pin-coords" class="hint">Няма избран пин.</small>
+                </div>
+
+                <label>
+                  Снимки / Видео <span class="field-hint">(опционално)</span>
+                  <input type="file" id="memory-media" accept="image/*,video/*" multiple />
+                </label>
+                <div id="memory-media-preview" class="media-preview-grid"></div>
+
+                <button type="submit" class="btn-primary">Запази спомен</button>
+              </form>
+            </article>
+          </div>
+
         </section>
 
+        <!-- ── TIMELINE TAB ──────────────────────────────────────── -->
         <section id="timeline" class="tab-panel">
           <article class="card">
             <div class="card-heading-with-action">
-              <h3>Timeline</h3>
+              <h3 class="section-title">Timeline</h3>
               <button type="button" id="clear-tag-filter" class="ghost tiny hidden">Изчисти филтър</button>
             </div>
             <p id="active-tag-info" class="hint hidden"></p>
@@ -131,18 +174,20 @@
           </article>
         </section>
 
+        <!-- ── MAP TAB ───────────────────────────────────────────── -->
         <section id="map" class="tab-panel">
           <article class="card">
-            <h3>Карта на спомените</h3>
-            <p class="hint">Всички пинове, отбелязани до момента:</p>
+            <h3 class="section-title">Карта на спомените</h3>
+            <p class="hint">Всички отбелязани места:</p>
             <div id="map-board" class="map-board"></div>
             <ul id="map-pins-list" class="memory-list compact"></ul>
           </article>
         </section>
 
+        <!-- ── PEOPLE TAB ────────────────────────────────────────── -->
         <section id="people" class="tab-panel">
           <article id="people-overview-card" class="card">
-            <h3>People</h3>
+            <h3 class="section-title">Хора</h3>
             <p class="hint">Добави човек и снимка (по желание).</p>
             <form id="people-form" class="stacked-form compact-form">
               <label>
@@ -153,15 +198,15 @@
                 Снимка
                 <input type="file" id="people-photo" accept="image/*" />
               </label>
-              <button type="submit">Добави човек</button>
+              <button type="submit" class="btn-primary">Добави човек</button>
             </form>
             <ul id="people-list" class="people-list"></ul>
           </article>
 
           <article id="person-detail-card" class="card hidden">
             <div class="card-heading-with-action">
-              <h3>Профил на човек</h3>
-              <button type="button" id="person-detail-back" class="ghost tiny">Назад</button>
+              <h3 class="section-title">Профил</h3>
+              <button type="button" id="person-detail-back" class="ghost tiny">← Назад</button>
             </div>
             <div class="person-detail-header">
               <img id="person-detail-avatar" class="person-avatar large" alt="" />
@@ -175,15 +220,17 @@
           </article>
         </section>
 
+        <!-- ── TAGS TAB ──────────────────────────────────────────── -->
         <section id="tags" class="tab-panel">
           <article class="card">
-            <h3>Tags</h3>
-            <p class="hint">Избери таг, за да отидеш към свързаните спомени.</p>
+            <h3 class="section-title">Тагове</h3>
+            <p class="hint">Избери таг за свързаните спомени.</p>
             <ul id="tags-list" class="pill-list"></ul>
           </article>
         </section>
 
         <button id="fab-add-memory" class="fab" type="button" aria-label="Добави спомен">＋</button>
+
       </section>
     </main>
 

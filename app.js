@@ -4,6 +4,11 @@ const appScreen = document.querySelector('#app-screen');
 const welcomeText = document.querySelector('#welcome-text');
 const logoutBtn = document.querySelector('#logout-btn');
 
+const homeDashboard = document.querySelector('#home-dashboard');
+const homeAddForm = document.querySelector('#home-add-form');
+const homeFormBack = document.querySelector('#home-form-back');
+const showAllTimelineBtn = document.querySelector('#show-all-timeline-btn');
+
 const tabButtons = [...document.querySelectorAll('.tab-btn')];
 const panels = [...document.querySelectorAll('.tab-panel')];
 
@@ -152,6 +157,9 @@ function refreshLeafletMapSizes(targetTab) {
 function switchTab(targetTab) {
   tabButtons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === targetTab));
   panels.forEach((panel) => panel.classList.toggle('active', panel.id === targetTab));
+  if (targetTab === 'create-memory') {
+    showHomeDashboard();
+  }
   refreshLeafletMapSizes(targetTab);
 }
 
@@ -213,6 +221,19 @@ function monthLabel(dateValue) {
   return new Date(dateValue).toLocaleDateString('bg-BG', { month: 'long', year: 'numeric' });
 }
 
+function showHomeDashboard() {
+  homeDashboard.classList.remove('hidden');
+  homeAddForm.classList.add('hidden');
+}
+
+function showHomeAddForm() {
+  homeDashboard.classList.add('hidden');
+  homeAddForm.classList.remove('hidden');
+  if (mapMode === 'leaflet' && pickerMap) {
+    setTimeout(() => pickerMap.invalidateSize(), 50);
+  }
+}
+
 function renderHomeSummary() {
   if (!statsGrid || !homeRecentList) return;
 
@@ -225,17 +246,17 @@ function renderHomeSummary() {
   });
 
   const stats = [
-    { label: 'Memories', value: appState.memories.length },
-    { label: 'People', value: uniquePeople.size },
-    { label: 'Places', value: uniquePlaces.size },
-    { label: 'Photos', value: photosCount },
+    { label: 'Спомени', value: appState.memories.length, icon: '📸' },
+    { label: 'Хора', value: uniquePeople.size, icon: '👥' },
+    { label: 'Места', value: uniquePlaces.size, icon: '📍' },
+    { label: 'Снимки', value: photosCount, icon: '🖼️' },
   ];
 
   statsGrid.innerHTML = '';
   stats.forEach((stat) => {
     const card = document.createElement('article');
     card.className = 'stat-card';
-    card.innerHTML = `<small class="hint">${stat.label}</small><strong>${stat.value}</strong>`;
+    card.innerHTML = `<span class="stat-icon">${stat.icon}</span><strong>${stat.value}</strong><small>${stat.label}</small>`;
     statsGrid.appendChild(card);
   });
 
@@ -617,6 +638,21 @@ memoryMediaInput.addEventListener('change', () => {
 
 fabAddMemoryBtn.addEventListener('click', () => {
   switchTab('create-memory');
+  showHomeAddForm();
+});
+
+homeFormBack.addEventListener('click', () => {
+  showHomeDashboard();
+});
+
+showAllTimelineBtn.addEventListener('click', () => {
+  switchTab('timeline');
+});
+
+document.querySelectorAll('.quick-nav-item').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    switchTab(btn.dataset.nav);
+  });
 });
 
 personDetailBackBtn.addEventListener('click', () => {
@@ -693,7 +729,8 @@ memoryForm.addEventListener('submit', (event) => {
   appState.draftPin = null;
   saveState();
   render();
-  switchTab('timeline');
+  switchTab('create-memory');
+  showHomeDashboard();
   memoryForm.reset();
   renderMediaPreview();
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
