@@ -465,7 +465,9 @@ function renderPersonDetail() {
 
 function renderTimeline() {
   timelineList.innerHTML = '';
-  const sortedMemories = sortByEventDateDesc(appState.memories).filter(passesTagFilter);
+  const sortedMemories = [...appState.memories]
+    .sort((a, b) => toEventDateTimestamp(a) - toEventDateTimestamp(b))
+    .filter(passesTagFilter);
   let lastGroup = '';
 
   sortedMemories.forEach((memory) => {
