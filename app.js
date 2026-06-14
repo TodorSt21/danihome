@@ -763,17 +763,39 @@ function openMemoryDetail(createdAt, returnTab = 'timeline') {
   detailReturnTab = returnTab;
   appState.selectedMemory = createdAt;
   renderMemoryDetail();
-  memoryDetailEl.classList.remove('hidden');
-  memoryDetailEl.scrollTop = 0;
-  document.body.style.overflow = 'hidden';
-  // Init map after overlay is visible so the container has real dimensions
+
+  if (returnTab === 'map') {
+    // Inline mode: place detail inside the map tab panel, not as a fixed overlay
+    const mapSection = document.querySelector('#map');
+    mapSection.classList.add('showing-detail');
+    mapSection.appendChild(memoryDetailEl);
+    memoryDetailEl.classList.add('map-inline');
+    memoryDetailEl.classList.remove('hidden');
+    window.scrollTo(0, 0);
+  } else {
+    memoryDetailEl.classList.remove('hidden');
+    memoryDetailEl.scrollTop = 0;
+    document.body.style.overflow = 'hidden';
+  }
+
   requestAnimationFrame(() => initDetailStaticMap());
 }
 
 function closeMemoryDetail() {
   appState.selectedMemory = null;
+
+  if (memoryDetailEl.classList.contains('map-inline')) {
+    // Restore overlay element to its original position outside the tab panels
+    const mapSection = document.querySelector('#map');
+    mapSection.classList.remove('showing-detail');
+    memoryDetailEl.classList.remove('map-inline');
+    document.querySelector('#app-screen').appendChild(memoryDetailEl);
+    window.scrollTo(0, 0);
+  } else {
+    document.body.style.overflow = '';
+  }
+
   memoryDetailEl.classList.add('hidden');
-  document.body.style.overflow = '';
   switchTab(detailReturnTab);
 }
 

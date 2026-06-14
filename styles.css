@@ -680,6 +680,28 @@ button.tiny {
   transform: translateX(-50%);
 }
 
+/* When detail is shown inline inside the map tab (not as a fixed overlay) */
+.memory-detail.map-inline {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  overflow-y: visible;
+  animation: none;
+  transform: none;
+  max-width: none;
+  left: auto;
+}
+
+/* Hide the map card when the inline detail is active */
+#map.showing-detail > article {
+  display: none;
+}
+
+/* Remove double padding when detail flows inside the map tab panel */
+#map.showing-detail {
+  padding-bottom: 0;
+}
+
 .detail-topbar {
   position: sticky;
   top: 0;
