@@ -584,19 +584,30 @@ function renderTimeline() {
     const clone = memoryTemplate.content.cloneNode(true);
     clone.querySelector('.memory-photo').src = getMemoryCover(memory);
     clone.querySelector('.event-date').textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
-    clone.querySelector('.location').textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
     clone.querySelector('.text').textContent = memory.text;
-    clone.querySelector('.person').textContent = memory.person ? `👤 ${memory.person}` : '👤 Без човек';
-    clone.querySelector('.item').textContent = memory.item ? `🎒 ${memory.item}` : '🎒 Без предмет';
-    clone.querySelector('.media-count').textContent = memory.mediaCount ? `🎞️ ${memory.mediaCount} файла` : '🎞️ без медия';
+
+    const locationEl = clone.querySelector('.location');
+    if (memory.location) locationEl.textContent = `📍 ${memory.location}`;
+    else locationEl.remove();
+
+    const personEl = clone.querySelector('.person');
+    if (memory.person) personEl.textContent = `👤 ${memory.person}`;
+    else personEl.remove();
+
+    const itemEl = clone.querySelector('.item');
+    if (memory.item) itemEl.textContent = `🎒 ${memory.item}`;
+    else itemEl.remove();
+
+    const mediaEl = clone.querySelector('.media-count');
+    if (memory.mediaCount) mediaEl.textContent = `🎞️ ${memory.mediaCount} файла`;
+    else mediaEl.remove();
 
     const tagsWrap = clone.querySelector('.memory-tags');
     const entries = buildTagEntries(memory);
     if (entries.length) {
       entries.forEach((entry) => tagsWrap.appendChild(buildTagButton(entry)));
     } else {
-      tagsWrap.textContent = 'Без тагове';
-      tagsWrap.classList.add('no-tags');
+      tagsWrap.remove();
     }
 
     const deleteBtn = document.createElement('button');
