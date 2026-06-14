@@ -286,9 +286,18 @@
               </label>
 
               <label>
-                Локация <span class="field-hint">(опционално)</span>
+                Локация <span class="field-hint">(текст)</span>
                 <input type="text" id="edit-location" placeholder="Напр. София, НДК" />
               </label>
+
+              <div class="map-picker-wrap">
+                <div class="card-heading-with-action">
+                  <strong class="field-label">Пин на картата <span class="field-hint">(кликни за промяна)</span></strong>
+                  <button type="button" id="edit-clear-pin" class="ghost tiny">Изчисти пин</button>
+                </div>
+                <div id="edit-pin-picker" class="map-board" aria-label="Избери пин"></div>
+                <small id="edit-pin-coords" class="hint">Няма избран пин.</small>
+              </div>
 
               <label>
                 Човек <span class="field-hint">(опционално)</span>

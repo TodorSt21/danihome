@@ -68,6 +68,13 @@ const editExistingPhotos = document.querySelector('#edit-existing-photos');
 const editMediaInput = document.querySelector('#edit-media');
 const editMediaPreview = document.querySelector('#edit-media-preview');
 const detailEditCancel = document.querySelector('#detail-edit-cancel');
+const editPinPickerEl = document.querySelector('#edit-pin-picker');
+const editPinCoords = document.querySelector('#edit-pin-coords');
+const editClearPinBtn = document.querySelector('#edit-clear-pin');
+
+let editPickerMap;
+let editPickerMarker;
+let editDraftPin = null;
 
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
@@ -831,6 +838,52 @@ function addMetaPill(text) {
   detailMetaPills.appendChild(span);
 }
 
+function renderEditPin() {
+  if (mapMode === 'leaflet') {
+    if (editPickerMarker) { editPickerMap.removeLayer(editPickerMarker); editPickerMarker = null; }
+    if (editDraftPin) {
+      editPickerMarker = L.marker([editDraftPin.lat, editDraftPin.lng]).addTo(editPickerMap);
+      editPinCoords.textContent = `📍 ${editDraftPin.lat.toFixed(5)}, ${editDraftPin.lng.toFixed(5)}`;
+    } else {
+      editPinCoords.textContent = 'Няма избран пин.';
+    }
+  } else {
+    editPinPickerEl.querySelectorAll('.fallback-pin').forEach((p) => p.remove());
+    if (editDraftPin) {
+      addFallbackPin(editPinPickerEl, editDraftPin.x ?? 50, editDraftPin.y ?? 50, 'Пин');
+      editPinCoords.textContent = `📍 x ${(editDraftPin.x ?? 50).toFixed(1)}%, y ${(editDraftPin.y ?? 50).toFixed(1)}%`;
+    } else {
+      editPinCoords.textContent = 'Няма избран пин.';
+    }
+  }
+}
+
+function initEditMap(existingPin) {
+  if (mapMode === 'leaflet') {
+    if (!editPickerMap) {
+      editPickerMap = L.map('edit-pin-picker').setView(MAP_CONFIG.center, MAP_CONFIG.zoom);
+      L.tileLayer(MAP_CONFIG.tileUrl, { attribution: MAP_CONFIG.tileAttribution, maxZoom: 19 }).addTo(editPickerMap);
+      editPickerMap.on('click', (e) => {
+        editDraftPin = { lat: e.latlng.lat, lng: e.latlng.lng };
+        renderEditPin();
+      });
+    }
+    setTimeout(() => editPickerMap.invalidateSize(), 80);
+    if (existingPin?.lat) {
+      editPickerMap.setView([existingPin.lat, existingPin.lng], 13);
+    }
+  } else {
+    editPinPickerEl.addEventListener('click', (e) => {
+      const rect = editPinPickerEl.getBoundingClientRect();
+      editDraftPin = {
+        x: ((e.clientX - rect.left) / rect.width) * 100,
+        y: ((e.clientY - rect.top) / rect.height) * 100,
+      };
+      renderEditPin();
+    });
+  }
+}
+
 function enterEditMode() {
   const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
   if (!memory) return;
@@ -844,6 +897,9 @@ function enterEditMode() {
   editActivityTags.value = (memory.tags?.activity || []).join(', ');
   editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
   editNotesArea.value = memory.notes || '';
+
+  // Restore pin from memory
+  editDraftPin = memory.pin ? { ...memory.pin } : null;
 
   // Show existing photos
   editExistingPhotos.innerHTML = '';
@@ -864,11 +920,20 @@ function enterEditMode() {
   detailView.classList.add('hidden');
   detailEdit.classList.remove('hidden');
   memoryDetailEl.scrollTop = 0;
+
+  // Init map after becoming visible
+  initEditMap(memory.pin);
+  renderEditPin();
 }
 
 detailBackBtn.addEventListener('click', closeMemoryDetail);
 
 detailEditBtn.addEventListener('click', enterEditMode);
+
+editClearPinBtn.addEventListener('click', () => {
+  editDraftPin = null;
+  renderEditPin();
+});
 
 detailEditCancel.addEventListener('click', () => {
   detailView.classList.remove('hidden');
@@ -903,6 +968,7 @@ detailEditForm.addEventListener('submit', async (event) => {
     person: editPerson.value.trim(),
     item: editItem.value.trim(),
     notes: editNotesArea.value.trim(),
+    pin: editDraftPin,
     tags: {
       general: parseTagInput(editTags.value),
       activity: parseTagInput(editActivityTags.value),
