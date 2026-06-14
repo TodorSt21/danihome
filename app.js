@@ -94,6 +94,7 @@ function loadState() {
             tags: normalizeTagGroups(memory.tags),
             eventDate: memory.eventDate || memory.createdAt || new Date().toISOString(),
             pin: normalizePin(memory.pin),
+            mediaDataUrls: Array.isArray(memory.mediaDataUrls) ? memory.mediaDataUrls : [],
           }))
         : [],
     };
@@ -198,6 +199,7 @@ function formatEventDate(dateValue) {
 
 
 function getMemoryCover(memory) {
+  if (memory.mediaDataUrls && memory.mediaDataUrls.length > 0) return memory.mediaDataUrls[0];
   const personPhoto = memory.person ? getPersonPhoto(memory.person) : '';
   if (personPhoto) return personPhoto;
   return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="%236366f1"/><stop offset="1" stop-color="%2322c55e"/></linearGradient></defs><rect width="100%25" height="100%25" fill="url(%23g)"/><text x="50%25" y="52%25" font-size="42" text-anchor="middle" fill="white" font-family="Inter,Arial,sans-serif">Memory</text></svg>';
@@ -700,7 +702,7 @@ peopleForm.addEventListener('submit', async (event) => {
   peopleForm.reset();
 });
 
-memoryForm.addEventListener('submit', (event) => {
+memoryForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const text = document.querySelector('#memory-text').value.trim();
@@ -715,6 +717,10 @@ memoryForm.addEventListener('submit', (event) => {
 
   if (!text) return;
 
+  const mediaDataUrls = await Promise.all(
+    [...files].filter((f) => f.type.startsWith('image/')).map(fileToDataUrl)
+  );
+
   appState.memories.push({
     text,
     eventDate: eventDateInput || new Date().toISOString().slice(0, 10),
@@ -724,6 +730,7 @@ memoryForm.addEventListener('submit', (event) => {
     tags: { general: generalTags, activity: activityTags, emotion: emotionTags },
     pin: appState.draftPin,
     mediaCount: files.length,
+    mediaDataUrls,
     createdAt: new Date().toISOString(),
   });
 
