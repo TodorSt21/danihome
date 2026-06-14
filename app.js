@@ -500,6 +500,18 @@ function renderTimeline() {
       tagsWrap.classList.add('no-tags');
     }
 
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn-delete-memory';
+    deleteBtn.textContent = 'Изтрий';
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm('Изтриване на спомена?')) return;
+      appState.memories = appState.memories.filter((m) => m.createdAt !== memory.createdAt);
+      saveState();
+      render();
+    });
+    clone.querySelector('.memory-card-body').appendChild(deleteBtn);
+
     timelineList.appendChild(clone);
   });
 

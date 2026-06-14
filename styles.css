@@ -432,6 +432,23 @@ button.tiny {
   background: rgba(79, 70, 229, 0.15);
 }
 
+.btn-delete-memory {
+  margin-top: 8px;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: none;
+  align-self: flex-start;
+}
+
+.btn-delete-memory:hover {
+  background: #fef2f2;
+}
+
 /* ── PILLS / TAGS PAGE ──────────────────────────────────────────── */
 
 .pill-list {
