@@ -264,19 +264,62 @@
           <!-- Edit mode -->
           <div id="detail-edit" class="hidden">
             <form id="detail-edit-form" class="stacked-form detail-edit-form">
+
               <label>
-                Описание
-                <textarea id="edit-text" rows="4"></textarea>
+                Описание <span class="required-mark">*</span>
+                <textarea id="edit-text" rows="4" placeholder="Какво се случи?"></textarea>
               </label>
+
+              <label>
+                Дата на събитието
+                <input type="date" id="edit-event-date" />
+              </label>
+
+              <label>
+                Локация <span class="field-hint">(опционално)</span>
+                <input type="text" id="edit-location" placeholder="Напр. София, НДК" />
+              </label>
+
+              <label>
+                Човек <span class="field-hint">(опционално)</span>
+                <input type="text" id="edit-person" placeholder="Напр. Мария" />
+              </label>
+
+              <label>
+                Предмет <span class="field-hint">(опционално)</span>
+                <input type="text" id="edit-item" placeholder="Напр. фотоапарат, книга" />
+              </label>
+
+              <label>
+                Тагове <span class="field-hint">(разделени със запетая)</span>
+                <input type="text" id="edit-tags" placeholder="Напр. пътуване, семейство" />
+              </label>
+
+              <label>
+                Тагове за дейност
+                <input type="text" id="edit-activity-tags" placeholder="Напр. разходка, снимане" />
+              </label>
+
+              <label>
+                Тагове за емоция
+                <input type="text" id="edit-emotion-tags" placeholder="Напр. радост, спокойствие" />
+              </label>
+
               <label>
                 Бележки
                 <textarea id="edit-notes" rows="3" placeholder="Допълнителни мисли..."></textarea>
               </label>
-              <label>
-                Добави снимки
-                <input type="file" id="edit-media" accept="image/*" multiple />
-              </label>
-              <div id="edit-media-preview" class="media-preview-grid"></div>
+
+              <div class="edit-photos-section">
+                <p class="detail-section-label">Съществуващи снимки</p>
+                <div id="edit-existing-photos" class="media-preview-grid"></div>
+                <label style="margin-top:8px">
+                  Добави нови снимки
+                  <input type="file" id="edit-media" accept="image/*" multiple />
+                </label>
+                <div id="edit-media-preview" class="media-preview-grid"></div>
+              </div>
+
               <div class="detail-edit-actions">
                 <button type="submit" class="btn-primary">Запази</button>
                 <button type="button" id="detail-edit-cancel" class="ghost">Отказ</button>

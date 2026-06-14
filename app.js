@@ -48,7 +48,15 @@ const detailNotesWrap = document.querySelector('#detail-notes-wrap');
 const detailNotesText = document.querySelector('#detail-notes');
 const detailEditForm = document.querySelector('#detail-edit-form');
 const editTextArea = document.querySelector('#edit-text');
+const editEventDate = document.querySelector('#edit-event-date');
+const editLocation = document.querySelector('#edit-location');
+const editPerson = document.querySelector('#edit-person');
+const editItem = document.querySelector('#edit-item');
+const editTags = document.querySelector('#edit-tags');
+const editActivityTags = document.querySelector('#edit-activity-tags');
+const editEmotionTags = document.querySelector('#edit-emotion-tags');
 const editNotesArea = document.querySelector('#edit-notes');
+const editExistingPhotos = document.querySelector('#edit-existing-photos');
 const editMediaInput = document.querySelector('#edit-media');
 const editMediaPreview = document.querySelector('#edit-media-preview');
 const detailEditCancel = document.querySelector('#detail-edit-cancel');
@@ -737,10 +745,33 @@ function addMetaPill(text) {
 function enterEditMode() {
   const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
   if (!memory) return;
+
   editTextArea.value = memory.text;
+  editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
+  editLocation.value = memory.location || '';
+  editPerson.value = memory.person || '';
+  editItem.value = memory.item || '';
+  editTags.value = (memory.tags?.general || []).join(', ');
+  editActivityTags.value = (memory.tags?.activity || []).join(', ');
+  editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
   editNotesArea.value = memory.notes || '';
+
+  // Show existing photos
+  editExistingPhotos.innerHTML = '';
+  (memory.mediaDataUrls || []).forEach((url) => {
+    const img = document.createElement('img');
+    img.className = 'media-preview-item';
+    img.src = url;
+    img.alt = '';
+    editExistingPhotos.appendChild(img);
+  });
+  if (!memory.mediaDataUrls?.length) {
+    editExistingPhotos.innerHTML = '<small class="hint">Няма добавени снимки.</small>';
+  }
+
   editMediaPreview.innerHTML = '';
   editMediaInput.value = '';
+
   detailView.classList.add('hidden');
   detailEdit.classList.remove('hidden');
   memoryDetailEl.scrollTop = 0;
@@ -774,11 +805,21 @@ detailEditForm.addEventListener('submit', async (event) => {
     [...editMediaInput.files].filter((f) => f.type.startsWith('image/')).map(fileToDataUrl)
   );
 
+  const existing = appState.memories[idx];
   appState.memories[idx] = {
-    ...appState.memories[idx],
-    text: editTextArea.value.trim() || appState.memories[idx].text,
+    ...existing,
+    text: editTextArea.value.trim() || existing.text,
+    eventDate: editEventDate.value || existing.eventDate,
+    location: editLocation.value.trim(),
+    person: editPerson.value.trim(),
+    item: editItem.value.trim(),
     notes: editNotesArea.value.trim(),
-    mediaDataUrls: [...appState.memories[idx].mediaDataUrls, ...newUrls],
+    tags: {
+      general: parseTagInput(editTags.value),
+      activity: parseTagInput(editActivityTags.value),
+      emotion: parseTagInput(editEmotionTags.value),
+    },
+    mediaDataUrls: [...(existing.mediaDataUrls || []), ...newUrls],
   };
 
   saveState();
