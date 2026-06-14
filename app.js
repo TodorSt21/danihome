@@ -48,10 +48,13 @@ const detailEditBtn = document.querySelector('#detail-edit-btn');
 const detailView = document.querySelector('#detail-view');
 const detailEdit = document.querySelector('#detail-edit');
 const detailGallery = document.querySelector('#detail-gallery');
+const detailTitle = document.querySelector('#detail-title');
 const detailDate = document.querySelector('#detail-date');
-const detailText = document.querySelector('#detail-text');
-const detailMetaPills = document.querySelector('#detail-meta-pills');
+const detailLocationEl = document.querySelector('#detail-location');
+const detailPersonEl = document.querySelector('#detail-person');
+const detailItemEl = document.querySelector('#detail-item');
 const detailTags = document.querySelector('#detail-tags');
+const detailText = document.querySelector('#detail-text');
 const detailNotesWrap = document.querySelector('#detail-notes-wrap');
 const detailNotesText = document.querySelector('#detail-notes');
 const detailEditForm = document.querySelector('#detail-edit-form');
@@ -804,39 +807,43 @@ function renderMemoryDetail() {
     detailGallery.appendChild(placeholder);
   }
 
-  // Date & text
-  detailDate.textContent = formatEventDate(memory.eventDate);
-  detailText.textContent = memory.text;
+  // 2. Title (memory text, large bold)
+  detailTitle.textContent = memory.text;
 
-  // Meta pills
-  detailMetaPills.innerHTML = '';
-  if (memory.location) addMetaPill(`📍 ${memory.location}`);
-  if (memory.person)   addMetaPill(`👤 ${memory.person}`);
-  if (memory.item)     addMetaPill(`🎒 ${memory.item}`);
+  // 3. Date
+  detailDate.textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
 
-  // Tags
+  // 4–6. Location / Person / Item — show only if filled
+  function setMetaRow(el, icon, value) {
+    if (value) {
+      el.textContent = `${icon} ${value}`;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+  setMetaRow(detailLocationEl, '📍', memory.location);
+  setMetaRow(detailPersonEl,   '👤', memory.person);
+  setMetaRow(detailItemEl,     '🎒', memory.item);
+
+  // 7. Tags as chips
   detailTags.innerHTML = '';
   buildTagEntries(memory).forEach((entry) => detailTags.appendChild(buildTagButton(entry)));
 
-  // Notes
+  // 8. Notes at the bottom (with label)
   if (memory.notes) {
     detailNotesText.textContent = memory.notes;
     detailNotesWrap.classList.remove('hidden');
   } else {
     detailNotesWrap.classList.add('hidden');
   }
+  detailText.classList.add('hidden');
 
   // Reset to view mode
   detailView.classList.remove('hidden');
   detailEdit.classList.add('hidden');
 }
 
-function addMetaPill(text) {
-  const span = document.createElement('span');
-  span.className = 'detail-meta-pill';
-  span.textContent = text;
-  detailMetaPills.appendChild(span);
-}
 
 function renderEditPin() {
   if (mapMode === 'leaflet') {
