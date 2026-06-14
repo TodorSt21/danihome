@@ -770,8 +770,16 @@ button.tiny {
 
 .detail-meta-rows {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 14px;
+}
+
+.detail-static-map {
+  height: 150px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  pointer-events: none;
 }
 
 .detail-meta-row {
