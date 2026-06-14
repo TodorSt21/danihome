@@ -775,6 +775,9 @@ button.tiny {
 }
 
 .detail-static-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   height: 150px;
   border-radius: 10px;
   overflow: hidden;
