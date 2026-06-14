@@ -39,7 +39,12 @@
             <h2 id="welcome-text">Здравей!</h2>
             <small class="hint">DaniHome</small>
           </div>
-          <button id="logout-btn" class="ghost tiny">Изход</button>
+          <div class="header-actions">
+            <button id="export-btn" class="ghost tiny" title="Свали всички спомени като JSON">⬇ Export</button>
+            <button id="import-btn" class="ghost tiny" title="Зареди спомени от JSON файл">⬆ Import</button>
+            <input type="file" id="import-file-input" accept=".json" class="hidden" />
+            <button id="logout-btn" class="ghost tiny">Изход</button>
+          </div>
         </header>
 
         <nav class="tabs bottom-nav" aria-label="Навигация">

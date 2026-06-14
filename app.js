@@ -34,6 +34,10 @@ const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
 
+const exportBtn = document.querySelector('#export-btn');
+const importBtn = document.querySelector('#import-btn');
+const importFileInput = document.querySelector('#import-file-input');
+
 const memoryPinPickerEl = document.querySelector('#memory-pin-picker');
 const mapBoardEl = document.querySelector('#map-board');
 const memoryPinCoords = document.querySelector('#memory-pin-coords');
@@ -617,6 +621,55 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
+function exportData() {
+  const payload = JSON.stringify({ memories: appState.memories, people: appState.people }, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pamet-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      const incomingMemories = Array.isArray(parsed.memories) ? parsed.memories : [];
+      const incomingPeople = Array.isArray(parsed.people) ? parsed.people : [];
+      if (!incomingMemories.length && !incomingPeople.length) {
+        alert('Файлът не съдържа валидни данни.');
+        return;
+      }
+      const existingIds = new Set(appState.memories.map((m) => m.createdAt));
+      const newMemories = incomingMemories.filter((m) => !existingIds.has(m.createdAt));
+      const existingPeopleNames = new Set(appState.people.map((p) => p.name.toLowerCase()));
+      const newPeople = incomingPeople.filter((p) => !existingPeopleNames.has(p.name.toLowerCase()));
+      appState.memories = [...appState.memories, ...newMemories];
+      appState.people = [...appState.people, ...newPeople];
+      saveState();
+      render();
+      alert(`Импортирани: ${newMemories.length} спомена, ${newPeople.length} хора.`);
+    } catch {
+      alert('Грешка при четене на файла. Уверете се, че е валиден JSON.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+exportBtn.addEventListener('click', exportData);
+
+importBtn.addEventListener('click', () => importFileInput.click());
+
+importFileInput.addEventListener('change', () => {
+  if (importFileInput.files[0]) {
+    importData(importFileInput.files[0]);
+    importFileInput.value = '';
+  }
+});
 
 loginForm.addEventListener('submit', (event) => {
   event.preventDefault();
