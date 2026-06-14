@@ -369,6 +369,41 @@ button.tiny {
   margin-top: 10px;
 }
 
+.search-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.search-wrap input[type="search"] {
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f9fafb;
+  font-size: 0.88rem;
+}
+
+.search-wrap input[type="search"]:focus {
+  background: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  padding: 4px;
+  box-shadow: none;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .timeline-list {
   border-left: 2px solid rgba(79, 70, 229, 0.2);
   padding-left: 10px;

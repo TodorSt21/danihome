@@ -28,6 +28,10 @@ const mapPinsList = document.querySelector('#map-pins-list');
 const memoryTemplate = document.querySelector('#memory-item-template');
 const activeTagInfo = document.querySelector('#active-tag-info');
 const clearTagFilterBtn = document.querySelector('#clear-tag-filter');
+const timelineSearchInput = document.querySelector('#timeline-search');
+const timelineSearchClear = document.querySelector('#timeline-search-clear');
+
+let searchQuery = '';
 const statsGrid = document.querySelector('#stats-grid');
 const homeRecentList = document.querySelector('#home-recent-list');
 const onThisDayCard = document.querySelector('#on-this-day-card');
@@ -489,6 +493,23 @@ function passesTagFilter(memory) {
   return memory.tags[appState.activeTag.type].includes(appState.activeTag.value);
 }
 
+function passesSearchFilter(memory) {
+  if (!searchQuery) return true;
+  const q = searchQuery.toLowerCase();
+  const allTags = [
+    ...memory.tags.general,
+    ...memory.tags.activity,
+    ...memory.tags.emotion,
+  ].join(' ');
+  return (
+    memory.text.toLowerCase().includes(q) ||
+    memory.person.toLowerCase().includes(q) ||
+    memory.location.toLowerCase().includes(q) ||
+    memory.item.toLowerCase().includes(q) ||
+    allTags.toLowerCase().includes(q)
+  );
+}
+
 function getPersonPhoto(name) {
   const lower = name.trim().toLowerCase();
   const found = appState.people.find((person) => person.name.trim().toLowerCase() === lower);
@@ -546,7 +567,8 @@ function renderTimeline() {
   timelineList.innerHTML = '';
   const sortedMemories = [...appState.memories]
     .sort((a, b) => toEventDateTimestamp(a) - toEventDateTimestamp(b))
-    .filter(passesTagFilter);
+    .filter(passesTagFilter)
+    .filter(passesSearchFilter);
   let lastGroup = '';
 
   sortedMemories.forEach((memory) => {
@@ -604,7 +626,11 @@ function renderTimeline() {
   if (!sortedMemories.length) {
     const empty = document.createElement('li');
     empty.className = 'empty-state';
-    empty.textContent = appState.activeTag ? 'Няма спомени за избрания филтър.' : 'Все още няма добавени спомени.';
+    empty.textContent = searchQuery
+      ? `Няма резултати за „${searchQuery}".`
+      : appState.activeTag
+        ? 'Няма спомени за избрания филтър.'
+        : 'Все още няма добавени спомени.';
     timelineList.appendChild(empty);
   }
 }
@@ -946,6 +972,20 @@ logoutBtn.addEventListener('click', () => {
 clearTagFilterBtn.addEventListener('click', () => {
   appState.activeTag = null;
   render();
+});
+
+timelineSearchInput.addEventListener('input', () => {
+  searchQuery = timelineSearchInput.value.trim();
+  timelineSearchClear.classList.toggle('hidden', !searchQuery);
+  renderTimeline();
+});
+
+timelineSearchClear.addEventListener('click', () => {
+  searchQuery = '';
+  timelineSearchInput.value = '';
+  timelineSearchClear.classList.add('hidden');
+  renderTimeline();
+  timelineSearchInput.focus();
 });
 
 clearPinBtn.addEventListener('click', () => {
