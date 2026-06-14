@@ -239,6 +239,52 @@
 
         <button id="fab-add-memory" class="fab" type="button" aria-label="Добави спомен">＋</button>
 
+        <!-- ── MEMORY DETAIL OVERLAY ─────────────────────────────── -->
+        <div id="memory-detail" class="memory-detail hidden" role="dialog" aria-modal="true">
+          <div class="detail-topbar">
+            <button id="detail-back-btn" class="detail-back-btn" type="button">← Назад</button>
+            <button id="detail-edit-btn" class="ghost tiny" type="button">✏️ Редактирай</button>
+          </div>
+
+          <!-- View mode -->
+          <div id="detail-view">
+            <div id="detail-gallery" class="detail-gallery"></div>
+            <div class="detail-body">
+              <p id="detail-date" class="detail-date"></p>
+              <p id="detail-text" class="detail-text"></p>
+              <div id="detail-meta-pills" class="detail-meta-pills"></div>
+              <div id="detail-tags" class="detail-tags"></div>
+              <div id="detail-notes-wrap" class="detail-notes-wrap hidden">
+                <h4 class="detail-section-label">Бележки</h4>
+                <p id="detail-notes" class="detail-notes-text"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Edit mode -->
+          <div id="detail-edit" class="hidden">
+            <form id="detail-edit-form" class="stacked-form detail-edit-form">
+              <label>
+                Описание
+                <textarea id="edit-text" rows="4"></textarea>
+              </label>
+              <label>
+                Бележки
+                <textarea id="edit-notes" rows="3" placeholder="Допълнителни мисли..."></textarea>
+              </label>
+              <label>
+                Добави снимки
+                <input type="file" id="edit-media" accept="image/*" multiple />
+              </label>
+              <div id="edit-media-preview" class="media-preview-grid"></div>
+              <div class="detail-edit-actions">
+                <button type="submit" class="btn-primary">Запази</button>
+                <button type="button" id="detail-edit-cancel" class="ghost">Отказ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
       </section>
     </main>
 

@@ -34,6 +34,25 @@ const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
 
+const memoryDetailEl = document.querySelector('#memory-detail');
+const detailBackBtn = document.querySelector('#detail-back-btn');
+const detailEditBtn = document.querySelector('#detail-edit-btn');
+const detailView = document.querySelector('#detail-view');
+const detailEdit = document.querySelector('#detail-edit');
+const detailGallery = document.querySelector('#detail-gallery');
+const detailDate = document.querySelector('#detail-date');
+const detailText = document.querySelector('#detail-text');
+const detailMetaPills = document.querySelector('#detail-meta-pills');
+const detailTags = document.querySelector('#detail-tags');
+const detailNotesWrap = document.querySelector('#detail-notes-wrap');
+const detailNotesText = document.querySelector('#detail-notes');
+const detailEditForm = document.querySelector('#detail-edit-form');
+const editTextArea = document.querySelector('#edit-text');
+const editNotesArea = document.querySelector('#edit-notes');
+const editMediaInput = document.querySelector('#edit-media');
+const editMediaPreview = document.querySelector('#edit-media-preview');
+const detailEditCancel = document.querySelector('#detail-edit-cancel');
+
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
 const importFileInput = document.querySelector('#import-file-input');
@@ -64,6 +83,7 @@ let appState = {
   activeTag: null,
   draftPin: null,
   selectedPerson: null,
+  selectedMemory: null,
 };
 
 let mapMode = 'fallback';
@@ -95,6 +115,7 @@ function loadState() {
             person: memory.person || '',
             item: memory.item || '',
             location: memory.location || '',
+            notes: memory.notes || '',
             tags: normalizeTagGroups(memory.tags),
             eventDate: memory.eventDate || memory.createdAt || new Date().toISOString(),
             pin: normalizePin(memory.pin),
@@ -514,7 +535,16 @@ function renderTimeline() {
       saveState();
       render();
     });
-    clone.querySelector('.memory-card-body').appendChild(deleteBtn);
+    const cardBody = clone.querySelector('.memory-card-body');
+    cardBody.appendChild(deleteBtn);
+
+    // Clicking anywhere on the card (except delete) opens detail view
+    const cardItem = clone.querySelector('.memory-item');
+    cardItem.style.cursor = 'pointer';
+    cardItem.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-delete-memory') || e.target.closest('.tag-chip')) return;
+      openMemoryDetail(memory.createdAt);
+    });
 
     timelineList.appendChild(clone);
   });
@@ -621,6 +651,142 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+
+function openMemoryDetail(createdAt) {
+  appState.selectedMemory = createdAt;
+  renderMemoryDetail();
+  memoryDetailEl.classList.remove('hidden');
+  memoryDetailEl.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMemoryDetail() {
+  appState.selectedMemory = null;
+  memoryDetailEl.classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderMemoryDetail() {
+  const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
+  if (!memory) return;
+
+  // Gallery
+  detailGallery.innerHTML = '';
+  detailGallery.onscroll = null;
+
+  if (memory.mediaDataUrls && memory.mediaDataUrls.length) {
+    memory.mediaDataUrls.forEach((url) => {
+      const img = document.createElement('img');
+      img.className = 'detail-gallery-img';
+      img.src = url;
+      img.alt = '';
+      detailGallery.appendChild(img);
+    });
+    if (memory.mediaDataUrls.length > 1) {
+      const count = document.createElement('span');
+      count.className = 'detail-gallery-count';
+      count.textContent = `1 / ${memory.mediaDataUrls.length}`;
+      detailGallery.addEventListener('scroll', () => {
+        const idx = Math.round(detailGallery.scrollLeft / detailGallery.clientWidth) + 1;
+        count.textContent = `${idx} / ${memory.mediaDataUrls.length}`;
+      }, { passive: true });
+      detailGallery.style.position = 'relative';
+      detailGallery.appendChild(count);
+    }
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'detail-gallery-placeholder';
+    placeholder.textContent = '📸';
+    detailGallery.appendChild(placeholder);
+  }
+
+  // Date & text
+  detailDate.textContent = formatEventDate(memory.eventDate);
+  detailText.textContent = memory.text;
+
+  // Meta pills
+  detailMetaPills.innerHTML = '';
+  if (memory.location) addMetaPill(`📍 ${memory.location}`);
+  if (memory.person)   addMetaPill(`👤 ${memory.person}`);
+  if (memory.item)     addMetaPill(`🎒 ${memory.item}`);
+
+  // Tags
+  detailTags.innerHTML = '';
+  buildTagEntries(memory).forEach((entry) => detailTags.appendChild(buildTagButton(entry)));
+
+  // Notes
+  if (memory.notes) {
+    detailNotesText.textContent = memory.notes;
+    detailNotesWrap.classList.remove('hidden');
+  } else {
+    detailNotesWrap.classList.add('hidden');
+  }
+
+  // Reset to view mode
+  detailView.classList.remove('hidden');
+  detailEdit.classList.add('hidden');
+}
+
+function addMetaPill(text) {
+  const span = document.createElement('span');
+  span.className = 'detail-meta-pill';
+  span.textContent = text;
+  detailMetaPills.appendChild(span);
+}
+
+function enterEditMode() {
+  const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
+  if (!memory) return;
+  editTextArea.value = memory.text;
+  editNotesArea.value = memory.notes || '';
+  editMediaPreview.innerHTML = '';
+  editMediaInput.value = '';
+  detailView.classList.add('hidden');
+  detailEdit.classList.remove('hidden');
+  memoryDetailEl.scrollTop = 0;
+}
+
+detailBackBtn.addEventListener('click', closeMemoryDetail);
+
+detailEditBtn.addEventListener('click', enterEditMode);
+
+detailEditCancel.addEventListener('click', () => {
+  detailView.classList.remove('hidden');
+  detailEdit.classList.add('hidden');
+});
+
+editMediaInput.addEventListener('change', () => {
+  editMediaPreview.innerHTML = '';
+  [...editMediaInput.files].slice(0, 6).filter((f) => f.type.startsWith('image/')).forEach((file) => {
+    const img = document.createElement('img');
+    img.className = 'media-preview-item';
+    img.src = URL.createObjectURL(file);
+    editMediaPreview.appendChild(img);
+  });
+});
+
+detailEditForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const idx = appState.memories.findIndex((m) => m.createdAt === appState.selectedMemory);
+  if (idx === -1) return;
+
+  const newUrls = await Promise.all(
+    [...editMediaInput.files].filter((f) => f.type.startsWith('image/')).map(fileToDataUrl)
+  );
+
+  appState.memories[idx] = {
+    ...appState.memories[idx],
+    text: editTextArea.value.trim() || appState.memories[idx].text,
+    notes: editNotesArea.value.trim(),
+    mediaDataUrls: [...appState.memories[idx].mediaDataUrls, ...newUrls],
+  };
+
+  saveState();
+  render();
+  renderMemoryDetail();
+  detailView.classList.remove('hidden');
+  detailEdit.classList.add('hidden');
+});
 
 function exportData() {
   const payload = JSON.stringify({ memories: appState.memories, people: appState.people }, null, 2);
@@ -792,6 +958,7 @@ memoryForm.addEventListener('submit', async (event) => {
     person,
     item,
     location,
+    notes: '',
     tags: { general: generalTags, activity: activityTags, emotion: emotionTags },
     pin: appState.draftPin,
     mediaCount: files.length,
