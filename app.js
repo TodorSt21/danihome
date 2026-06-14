@@ -32,6 +32,7 @@ const timelineSearchInput = document.querySelector('#timeline-search');
 const timelineSearchClear = document.querySelector('#timeline-search-clear');
 
 let searchQuery = '';
+let detailReturnTab = 'timeline';
 const statsGrid = document.querySelector('#stats-grid');
 const homeRecentList = document.querySelector('#home-recent-list');
 const onThisDayCard = document.querySelector('#on-this-day-card');
@@ -353,10 +354,7 @@ function renderOnThisDay() {
         <strong>${memory.text.slice(0, 60)}</strong>
         <small>${memory.location ? `📍 ${memory.location}` : ''}</small>
       </div>`;
-    li.addEventListener('click', () => {
-      switchTab('timeline');
-      openMemoryDetail(memory.createdAt);
-    });
+    li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
     onThisDayList.appendChild(li);
   });
 }
@@ -381,6 +379,7 @@ function addFallbackPin(container, x, y, title) {
   pin.style.top = `${y}%`;
   pin.title = title;
   container.appendChild(pin);
+  return pin;
 }
 
 function toFallbackPin(lat, lng) {
@@ -448,9 +447,8 @@ function renderMapPins() {
     overviewMarkersLayer.clearLayers();
     withPins.forEach((memory) => {
       if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
-        const title = memory.location || memory.text.slice(0, 48);
         const marker = L.marker([memory.pin.lat, memory.pin.lng]);
-        marker.bindPopup(`<strong>${title}</strong><br>${formatEventDate(memory.eventDate)}`);
+        marker.on('click', () => openMemoryDetail(memory.createdAt, 'map'));
         overviewMarkersLayer.addLayer(marker);
       }
     });
@@ -463,11 +461,16 @@ function renderMapPins() {
     mapBoardEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
     withPins.forEach((memory) => {
       const title = memory.location || memory.text.slice(0, 48);
+      let pin;
       if (Number.isFinite(memory.pin.x) && Number.isFinite(memory.pin.y)) {
-        addFallbackPin(mapBoardEl, memory.pin.x, memory.pin.y, title);
+        pin = addFallbackPin(mapBoardEl, memory.pin.x, memory.pin.y, title);
       } else if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
         const converted = toFallbackPin(memory.pin.lat, memory.pin.lng);
-        addFallbackPin(mapBoardEl, converted.x, converted.y, title);
+        pin = addFallbackPin(mapBoardEl, converted.x, converted.y, title);
+      }
+      if (pin) {
+        pin.style.cursor = 'pointer';
+        pin.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
       }
     });
   }
@@ -476,7 +479,9 @@ function renderMapPins() {
     const title = memory.location || memory.text.slice(0, 48);
     const li = document.createElement('li');
     li.className = 'memory-item';
+    li.style.cursor = 'pointer';
     li.textContent = `📍 Пин #${index + 1} — ${title}`;
+    li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
     mapPinsList.appendChild(li);
   });
 
@@ -742,7 +747,8 @@ function fileToDataUrl(file) {
   });
 }
 
-function openMemoryDetail(createdAt) {
+function openMemoryDetail(createdAt, returnTab = 'timeline') {
+  detailReturnTab = returnTab;
   appState.selectedMemory = createdAt;
   renderMemoryDetail();
   memoryDetailEl.classList.remove('hidden');
@@ -754,6 +760,7 @@ function closeMemoryDetail() {
   appState.selectedMemory = null;
   memoryDetailEl.classList.add('hidden');
   document.body.style.overflow = '';
+  switchTab(detailReturnTab);
 }
 
 function renderMemoryDetail() {
