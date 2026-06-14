@@ -80,6 +80,7 @@ const editClearPinBtn = document.querySelector('#edit-clear-pin');
 let editPickerMap;
 let editPickerMarker;
 let editDraftPin = null;
+let editRemovedPhotoIndices = new Set();
 
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
@@ -968,14 +969,33 @@ function enterEditMode() {
   // Restore pin from memory
   editDraftPin = memory.pin ? { ...memory.pin } : null;
 
-  // Show existing photos
+  // Show existing photos with individual delete buttons
+  editRemovedPhotoIndices = new Set();
   editExistingPhotos.innerHTML = '';
-  (memory.mediaDataUrls || []).forEach((url) => {
+  (memory.mediaDataUrls || []).forEach((url, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-thumb-wrap';
+    wrap.dataset.index = i;
+
     const img = document.createElement('img');
     img.className = 'media-preview-item';
     img.src = url;
     img.alt = '';
-    editExistingPhotos.appendChild(img);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'photo-remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.setAttribute('aria-label', 'Изтрий снимка');
+    removeBtn.addEventListener('click', () => {
+      if (!confirm('Изтрий тази снимка?')) return;
+      editRemovedPhotoIndices.add(i);
+      wrap.classList.add('photo-removed');
+    });
+
+    wrap.appendChild(img);
+    wrap.appendChild(removeBtn);
+    editExistingPhotos.appendChild(wrap);
   });
   if (!memory.mediaDataUrls?.length) {
     editExistingPhotos.innerHTML = '<small class="hint">Няма добавени снимки.</small>';
@@ -1041,7 +1061,10 @@ detailEditForm.addEventListener('submit', async (event) => {
       activity: parseTagInput(editActivityTags.value),
       emotion: parseTagInput(editEmotionTags.value),
     },
-    mediaDataUrls: [...(existing.mediaDataUrls || []), ...newUrls],
+    mediaDataUrls: [
+      ...(existing.mediaDataUrls || []).filter((_, i) => !editRemovedPhotoIndices.has(i)),
+      ...newUrls,
+    ],
   };
 
   saveState();
