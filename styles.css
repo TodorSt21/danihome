@@ -439,6 +439,21 @@ button.tiny {
   background: rgba(79, 70, 229, 0.15);
 }
 
+.on-this-day-card {
+  border-left: 3px solid var(--primary);
+}
+
+.on-this-day-year {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+}
+
 .btn-delete-memory {
   margin-top: 8px;
   background: transparent;

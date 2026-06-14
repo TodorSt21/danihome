@@ -30,6 +30,9 @@ const activeTagInfo = document.querySelector('#active-tag-info');
 const clearTagFilterBtn = document.querySelector('#clear-tag-filter');
 const statsGrid = document.querySelector('#stats-grid');
 const homeRecentList = document.querySelector('#home-recent-list');
+const onThisDayCard = document.querySelector('#on-this-day-card');
+const onThisDaySubtitle = document.querySelector('#on-this-day-subtitle');
+const onThisDayList = document.querySelector('#on-this-day-list');
 const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
@@ -311,6 +314,47 @@ function renderHomeSummary() {
     li.textContent = 'Все още няма добавени спомени.';
     homeRecentList.appendChild(li);
   }
+}
+
+function renderOnThisDay() {
+  const today = new Date();
+  const todayMonth = today.getMonth();
+  const todayDay = today.getDate();
+  const thisYear = today.getFullYear();
+
+  const matches = appState.memories.filter((memory) => {
+    const d = new Date(memory.eventDate);
+    return d.getMonth() === todayMonth && d.getDate() === todayDay && d.getFullYear() < thisYear;
+  }).sort((a, b) => toEventDateTimestamp(b) - toEventDateTimestamp(a));
+
+  if (!matches.length) {
+    onThisDayCard.classList.add('hidden');
+    return;
+  }
+
+  onThisDayCard.classList.remove('hidden');
+  onThisDaySubtitle.textContent =
+    today.toLocaleDateString('bg-BG', { day: 'numeric', month: 'long' }) + ' в предишни години';
+
+  onThisDayList.innerHTML = '';
+  matches.forEach((memory) => {
+    const year = new Date(memory.eventDate).getFullYear();
+    const li = document.createElement('li');
+    li.className = 'memory-item memory-card';
+    li.style.cursor = 'pointer';
+    li.innerHTML = `
+      <img class="memory-photo" src="${getMemoryCover(memory)}" alt="" />
+      <div class="memory-card-body">
+        <span class="on-this-day-year">${year}</span>
+        <strong>${memory.text.slice(0, 60)}</strong>
+        <small>${memory.location ? `📍 ${memory.location}` : ''}</small>
+      </div>`;
+    li.addEventListener('click', () => {
+      switchTab('timeline');
+      openMemoryDetail(memory.createdAt);
+    });
+    onThisDayList.appendChild(li);
+  });
 }
 
 function renderMediaPreview() {
@@ -643,6 +687,7 @@ function renderFilterState() {
 function render() {
   renderFilterState();
   renderHomeSummary();
+  renderOnThisDay();
   renderTimeline();
   renderPeople();
   renderPersonDetail();

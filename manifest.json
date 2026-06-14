@@ -1,6 +1,6 @@
 {
-  "name": "ПАМЕТ",
-  "short_name": "ПАМЕТ",
+  "name": "Памет",
+  "short_name": "Памет",
   "description": "Твоите лични спомени",
   "start_url": "/",
   "display": "standalone",

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DaniHome | Спомени</title>
+    <title>Памет | Спомени</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#4f46e5" />
     <link rel="apple-touch-icon" href="/icons/icon.svg" />
@@ -18,7 +18,7 @@
       <section id="login-screen" class="screen active login-screen-layout">
         <div class="card login-card">
           <div class="logo-badge">📸</div>
-          <h1>DaniHome</h1>
+          <h1>ПАМЕТ</h1>
           <p class="hint">Твоите лични спомени</p>
           <form id="login-form" class="stacked-form">
             <label>
@@ -40,7 +40,7 @@
         <header class="mobile-header">
           <div>
             <h2 id="welcome-text">Здравей!</h2>
-            <small class="hint">DaniHome</small>
+            <small class="hint">ПАМЕТ</small>
           </div>
           <div class="header-actions">
             <button id="export-btn" class="ghost tiny" title="Свали всички спомени като JSON">⬇ Export</button>
@@ -96,6 +96,12 @@
                 <button type="button" class="ghost tiny" id="show-all-timeline-btn">Всички</button>
               </div>
               <ul id="home-recent-list" class="memory-list compact"></ul>
+            </article>
+
+            <article class="card on-this-day-card hidden" id="on-this-day-card">
+              <h3 class="section-title">🗓️ На тази дата</h3>
+              <p class="hint" id="on-this-day-subtitle"></p>
+              <ul id="on-this-day-list" class="memory-list compact"></ul>
             </article>
 
           </div>
