@@ -766,6 +766,8 @@ function openMemoryDetail(createdAt, returnTab = 'timeline') {
   memoryDetailEl.classList.remove('hidden');
   memoryDetailEl.scrollTop = 0;
   document.body.style.overflow = 'hidden';
+  // Init map after overlay is visible so the container has real dimensions
+  requestAnimationFrame(() => initDetailStaticMap());
 }
 
 function closeMemoryDetail() {
@@ -826,27 +828,12 @@ function renderMemoryDetail() {
   }
   setMetaRow(detailLocationEl, '📍', memory.location);
 
-  // Static pin map (only if pin exists)
+  // Static pin map — actual Leaflet init is deferred until overlay is visible
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
   const pin = memory.pin;
   if (pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && mapMode === 'leaflet') {
     detailStaticMapEl.classList.remove('hidden');
     detailStaticMapEl.innerHTML = '';
-    detailMapInstance = L.map(detailStaticMapEl, {
-      center: [pin.lat, pin.lng],
-      zoom: 13,
-      zoomControl: false,
-      dragging: false,
-      touchZoom: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      attributionControl: false,
-    });
-    L.tileLayer(MAP_CONFIG.tileUrl, { maxZoom: 19 }).addTo(detailMapInstance);
-    L.marker([pin.lat, pin.lng]).addTo(detailMapInstance);
-    setTimeout(() => detailMapInstance && detailMapInstance.invalidateSize(), 80);
   } else {
     detailStaticMapEl.classList.add('hidden');
   }
@@ -872,6 +859,29 @@ function renderMemoryDetail() {
   detailEdit.classList.add('hidden');
 }
 
+function initDetailStaticMap() {
+  const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
+  if (!memory) return;
+  if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
+  const pin = memory.pin;
+  if (!pin || !Number.isFinite(pin.lat) || !Number.isFinite(pin.lng) || mapMode !== 'leaflet') return;
+  detailStaticMapEl.innerHTML = '';
+  detailMapInstance = L.map(detailStaticMapEl, {
+    center: [pin.lat, pin.lng],
+    zoom: 13,
+    zoomControl: false,
+    dragging: false,
+    touchZoom: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    attributionControl: false,
+  });
+  L.tileLayer(MAP_CONFIG.tileUrl, { maxZoom: 19 }).addTo(detailMapInstance);
+  L.marker([pin.lat, pin.lng]).addTo(detailMapInstance);
+  setTimeout(() => detailMapInstance && detailMapInstance.invalidateSize(), 50);
+}
 
 function renderEditPin() {
   if (mapMode === 'leaflet') {
@@ -1015,6 +1025,7 @@ detailEditForm.addEventListener('submit', async (event) => {
   saveState();
   render();
   renderMemoryDetail();
+  requestAnimationFrame(() => initDetailStaticMap());
   detailView.classList.remove('hidden');
   detailEdit.classList.add('hidden');
 });
