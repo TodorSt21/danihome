@@ -91,7 +91,10 @@ const mapBoardEl = document.querySelector('#map-board');
 const memoryPinCoords = document.querySelector('#memory-pin-coords');
 const clearPinBtn = document.querySelector('#clear-pin');
 
-const STORAGE_KEY = 'memories-mobile-app';
+// --- Supabase ---
+const SUPABASE_URL = 'https://vcmypvmwtccejwuaiiod.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjbXlwdm13dGNjZWp3dWFpaW9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTQzODgsImV4cCI6MjA4OTc3MDM4OH0.smL2oX-kbE5X0Ojfu-gwGBL_XO8khGedxIMh_1PAbvQ';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219],
@@ -107,6 +110,7 @@ const MAP_CONFIG = {
 
 let appState = {
   user: null,
+  userId: null,
   memories: [],
   people: [],
   activeTag: null,
@@ -121,52 +125,101 @@ let pickerMarker;
 let overviewMap;
 let overviewMarkersLayer;
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
+// --- Supabase helpers ---
 
-  try {
-    const parsed = JSON.parse(raw);
-    appState = {
-      user: parsed.user || null,
-      activeTag: null,
-      draftPin: null,
-      selectedPerson: null,
-      people: Array.isArray(parsed.people)
-        ? parsed.people.map((person) => ({
-            name: person?.name || '',
-            photoDataUrl: person?.photoDataUrl || '',
-          }))
-        : [],
-      memories: Array.isArray(parsed.memories)
-        ? parsed.memories.map((memory) => ({
-            ...memory,
-            person: memory.person || '',
-            item: memory.item || '',
-            location: memory.location || '',
-            notes: memory.notes || '',
-            tags: normalizeTagGroups(memory.tags),
-            eventDate: memory.eventDate || memory.createdAt || new Date().toISOString(),
-            pin: normalizePin(memory.pin),
-            mediaDataUrls: Array.isArray(memory.mediaDataUrls) ? memory.mediaDataUrls : [],
-          }))
-        : [],
-    };
-  } catch {
-    appState = { user: null, memories: [], people: [], activeTag: null, draftPin: null, selectedPerson: null };
+function memPhotoUrl(path) {
+  return sb.storage.from('memory-photos').getPublicUrl(path).data.publicUrl;
+}
+
+function peoplePhotoUrl(path) {
+  return sb.storage.from('people-photos').getPublicUrl(path).data.publicUrl;
+}
+
+function mapMemory(row) {
+  const media = (row.memory_media || []).slice().sort((a, b) => a.position - b.position);
+  return {
+    createdAt: row.id,
+    text: row.text || '',
+    eventDate: row.event_date || row.created_at,
+    location: row.location || '',
+    person: row.person || '',
+    item: row.item || '',
+    notes: row.notes || '',
+    pin: normalizePin(row.pin),
+    tags: normalizeTagGroups(row.tags),
+    mediaDataUrls: media.map((m) => memPhotoUrl(m.storage_path)),
+    mediaPaths: media.map((m) => m.storage_path),
+    mediaCount: media.length,
+  };
+}
+
+function mapPerson(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    photoDataUrl: row.photo_url ? peoplePhotoUrl(row.photo_url) : '',
+    photoPath: row.photo_url || '',
+  };
+}
+
+async function loadData() {
+  const [memoriesResult, peopleResult] = await Promise.all([
+    sb.from('memories').select('*, memory_media(*)').eq('user_id', appState.userId),
+    sb.from('people').select('*').eq('user_id', appState.userId),
+  ]);
+
+  if (memoriesResult.data) {
+    appState.memories = memoriesResult.data.map(mapMemory);
+  }
+  if (peopleResult.data) {
+    appState.people = peopleResult.data.map(mapPerson);
   }
 }
 
-function saveState() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      user: appState.user,
-      memories: appState.memories,
-      people: appState.people,
-    }),
-  );
+async function deleteMemoryById(id) {
+  const memory = appState.memories.find((m) => m.createdAt === id);
+  await sb.from('memories').delete().eq('id', id);
+  if (memory && memory.mediaPaths && memory.mediaPaths.length) {
+    await sb.storage.from('memory-photos').remove(memory.mediaPaths);
+  }
+  appState.memories = appState.memories.filter((m) => m.createdAt !== id);
 }
+
+async function uploadMemPhotoFile(file, userId, memoryId, position) {
+  const ext = file.name.split('.').pop();
+  const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
+  await sb.storage.from('memory-photos').upload(path, file);
+  await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  return path;
+}
+
+async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
+  const ext = blob.type.split('/')[1] || 'jpg';
+  const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
+  await sb.storage.from('memory-photos').upload(path, blob);
+  await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  return path;
+}
+
+async function uploadPeoplePhotoBlob(blob, userId) {
+  const ext = blob.type.split('/')[1] || 'jpg';
+  const path = `${userId}/${Date.now()}.${ext}`;
+  await sb.storage.from('people-photos').upload(path, blob);
+  return path;
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const binary = atob(base64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    arr[i] = binary.charCodeAt(i);
+  }
+  return new Blob([arr], { type: mime });
+}
+
+// --- Core functions ---
 
 function normalizePin(pin) {
   if (!pin) return null;
@@ -191,7 +244,7 @@ function setScreen() {
   const loggedIn = Boolean(appState.user);
   loginScreen.classList.toggle('active', !loggedIn);
   appScreen.classList.toggle('active', loggedIn);
-  if (loggedIn) welcomeText.textContent = `Здравей, ${appState.user}!`;
+  if (loggedIn) welcomeText.textContent = `Здравей, ${appState.user.split('@')[0]}!`;
   if (loggedIn) {
     refreshLeafletMapSizes();
   }
@@ -632,10 +685,10 @@ function renderTimeline() {
     deleteBtn.type = 'button';
     deleteBtn.className = 'btn-delete-memory';
     deleteBtn.textContent = 'Изтрий';
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', async () => {
       if (!confirm('Изтриване на спомена?')) return;
-      appState.memories = appState.memories.filter((m) => m.createdAt !== memory.createdAt);
-      saveState();
+      deleteBtn.disabled = true;
+      await deleteMemoryById(memory.createdAt);
       render();
     });
     const cardBody = clone.querySelector('.memory-card-body');
@@ -749,15 +802,6 @@ function render() {
   renderTags();
   renderDraftPin();
   renderMapPins();
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 function openMemoryDetail(createdAt, returnTab = 'timeline') {
@@ -1039,36 +1083,54 @@ editMediaInput.addEventListener('change', () => {
 
 detailEditForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const idx = appState.memories.findIndex((m) => m.createdAt === appState.selectedMemory);
-  if (idx === -1) return;
+  const memoryId = appState.selectedMemory;
+  const memory = appState.memories.find((m) => m.createdAt === memoryId);
+  if (!memory) return;
 
-  const newUrls = await Promise.all(
-    [...editMediaInput.files].filter((f) => f.type.startsWith('image/')).map(fileToDataUrl)
-  );
-
-  const existing = appState.memories[idx];
-  appState.memories[idx] = {
-    ...existing,
-    text: editTextArea.value.trim() || existing.text,
-    eventDate: editEventDate.value || existing.eventDate,
-    location: editLocation.value.trim(),
-    person: editPerson.value.trim(),
-    item: editItem.value.trim(),
-    notes: editNotesArea.value.trim(),
-    pin: editDraftPin,
-    tags: {
-      general: parseTagInput(editTags.value),
-      activity: parseTagInput(editActivityTags.value),
-      emotion: parseTagInput(editEmotionTags.value),
-    },
-    mediaDataUrls: [
-      ...(existing.mediaDataUrls || []).filter((_, i) => !editRemovedPhotoIndices.has(i)),
-      ...newUrls,
-    ],
+  const newText = editTextArea.value.trim() || memory.text;
+  const newEventDate = editEventDate.value || memory.eventDate;
+  const newLocation = editLocation.value.trim();
+  const newPerson = editPerson.value.trim();
+  const newItem = editItem.value.trim();
+  const newNotes = editNotesArea.value.trim();
+  const newTags = {
+    general: parseTagInput(editTags.value),
+    activity: parseTagInput(editActivityTags.value),
+    emotion: parseTagInput(editEmotionTags.value),
   };
 
-  saveState();
-  render();
+  // Update memory row in Supabase
+  await sb.from('memories').update({
+    text: newText,
+    event_date: newEventDate,
+    location: newLocation,
+    person: newPerson,
+    item: newItem,
+    notes: newNotes,
+    pin: editDraftPin,
+    tags: newTags,
+  }).eq('id', memoryId);
+
+  // Remove deleted photos
+  if (editRemovedPhotoIndices.size > 0) {
+    const removedPaths = (memory.mediaPaths || []).filter((_, i) => editRemovedPhotoIndices.has(i));
+    if (removedPaths.length) {
+      // Delete memory_media rows for removed paths
+      for (const path of removedPaths) {
+        await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+      }
+      await sb.storage.from('memory-photos').remove(removedPaths);
+    }
+  }
+
+  // Upload new photos
+  const newFiles = [...editMediaInput.files].filter((f) => f.type.startsWith('image/'));
+  const existingCount = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i)).length;
+  for (let i = 0; i < newFiles.length; i++) {
+    await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
+  }
+
+  await loadData();
   renderMemoryDetail();
   requestAnimationFrame(() => initDetailStaticMap());
   detailView.classList.remove('hidden');
@@ -1086,9 +1148,9 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
-function importData(file) {
+async function importData(file) {
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const parsed = JSON.parse(e.target.result);
       const incomingMemories = Array.isArray(parsed.memories) ? parsed.memories : [];
@@ -1097,15 +1159,87 @@ function importData(file) {
         alert('Файлът не съдържа валидни данни.');
         return;
       }
-      const existingIds = new Set(appState.memories.map((m) => m.createdAt));
-      const newMemories = incomingMemories.filter((m) => !existingIds.has(m.createdAt));
+
+      // Deduplicate by text+eventDate
+      const existingKeys = new Set(appState.memories.map((m) => `${m.text}|${m.eventDate}`));
+      let importedMemories = 0;
+
+      for (const m of incomingMemories) {
+        const key = `${m.text}|${m.eventDate || m.createdAt}`;
+        if (existingKeys.has(key)) continue;
+
+        const { data: inserted, error } = await sb.from('memories').insert({
+          user_id: appState.userId,
+          text: m.text || '',
+          event_date: m.eventDate || m.event_date || new Date().toISOString().slice(0, 10),
+          location: m.location || '',
+          person: m.person || '',
+          item: m.item || '',
+          notes: m.notes || '',
+          pin: m.pin || null,
+          tags: m.tags || null,
+        }).select().single();
+
+        if (error || !inserted) continue;
+
+        const newMemId = inserted.id;
+        const mediaUrls = Array.isArray(m.mediaDataUrls) ? m.mediaDataUrls : [];
+        for (let i = 0; i < mediaUrls.length; i++) {
+          const url = mediaUrls[i];
+          try {
+            let blob;
+            if (url.startsWith('data:')) {
+              blob = dataUrlToBlob(url);
+            } else {
+              const resp = await fetch(url);
+              blob = await resp.blob();
+            }
+            await uploadMemPhotoBlob(blob, appState.userId, newMemId, i);
+          } catch {
+            // skip failed media
+          }
+        }
+
+        importedMemories++;
+        existingKeys.add(key);
+      }
+
+      // Import people
       const existingPeopleNames = new Set(appState.people.map((p) => p.name.toLowerCase()));
-      const newPeople = incomingPeople.filter((p) => !existingPeopleNames.has(p.name.toLowerCase()));
-      appState.memories = [...appState.memories, ...newMemories];
-      appState.people = [...appState.people, ...newPeople];
-      saveState();
+      let importedPeople = 0;
+
+      for (const p of incomingPeople) {
+        if (!p.name || existingPeopleNames.has(p.name.toLowerCase())) continue;
+
+        let photoPath = '';
+        if (p.photoDataUrl) {
+          try {
+            let blob;
+            if (p.photoDataUrl.startsWith('data:')) {
+              blob = dataUrlToBlob(p.photoDataUrl);
+            } else {
+              const resp = await fetch(p.photoDataUrl);
+              blob = await resp.blob();
+            }
+            photoPath = await uploadPeoplePhotoBlob(blob, appState.userId);
+          } catch {
+            // skip failed photo
+          }
+        }
+
+        await sb.from('people').insert({
+          user_id: appState.userId,
+          name: p.name,
+          photo_url: photoPath || null,
+        });
+
+        importedPeople++;
+        existingPeopleNames.add(p.name.toLowerCase());
+      }
+
+      await loadData();
       render();
-      alert(`Импортирани: ${newMemories.length} спомена, ${newPeople.length} хора.`);
+      alert(`Импортирани: ${importedMemories} спомена, ${importedPeople} хора.`);
     } catch {
       alert('Грешка при четене на файла. Уверете се, че е валиден JSON.');
     }
@@ -1124,24 +1258,29 @@ importFileInput.addEventListener('change', () => {
   }
 });
 
-loginForm.addEventListener('submit', (event) => {
+loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const username = document.querySelector('#username').value.trim();
-  if (!username) return;
-  appState.user = username;
-  saveState();
-  setScreen();
-  switchTab('create-memory');
-  render();
+  const email = document.querySelector('#username').value.trim();
+  const password = document.querySelector('#password') ? document.querySelector('#password').value : '';
+  if (!email) return;
+
+  const submitBtn = loginForm.querySelector('[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    const errEl = loginForm.querySelector('.login-error') || document.createElement('p');
+    errEl.className = 'login-error';
+    errEl.style.color = 'red';
+    errEl.textContent = error.message;
+    if (!loginForm.querySelector('.login-error')) loginForm.appendChild(errEl);
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 logoutBtn.addEventListener('click', () => {
-  appState.user = null;
-  appState.activeTag = null;
-  appState.selectedPerson = null;
-  saveState();
-  setScreen();
-  switchTab('create-memory');
+  sb.auth.signOut();
 });
 
 clearTagFilterBtn.addEventListener('click', () => {
@@ -1213,22 +1352,37 @@ peopleForm.addEventListener('submit', async (event) => {
   const name = nameInput.value.trim();
   if (!name) return;
 
-  let photoDataUrl = '';
+  const existingPerson = appState.people.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+
+  let photoPath = existingPerson ? existingPerson.photoPath : '';
+
   if (fileInput.files[0]) {
-    photoDataUrl = await fileToDataUrl(fileInput.files[0]);
+    // Upload new photo blob
+    const file = fileInput.files[0];
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+    const newPath = await uploadPeoplePhotoBlob(blob, appState.userId);
+
+    // Delete old photo from storage if updating
+    if (existingPerson && existingPerson.photoPath) {
+      await sb.storage.from('people-photos').remove([existingPerson.photoPath]);
+    }
+
+    photoPath = newPath;
   }
 
-  const existingIndex = appState.people.findIndex((person) => person.name.trim().toLowerCase() === name.toLowerCase());
-  if (existingIndex >= 0) {
-    appState.people[existingIndex] = {
-      name,
-      photoDataUrl: photoDataUrl || appState.people[existingIndex].photoDataUrl,
-    };
+  if (existingPerson) {
+    await sb.from('people').update({
+      photo_url: photoPath || null,
+    }).eq('id', existingPerson.id);
   } else {
-    appState.people.push({ name, photoDataUrl });
+    await sb.from('people').insert({
+      user_id: appState.userId,
+      name,
+      photo_url: photoPath || null,
+    });
   }
 
-  saveState();
+  await loadData();
   renderPeople();
   renderPersonDetail();
   peopleForm.reset();
@@ -1245,31 +1399,41 @@ memoryForm.addEventListener('submit', async (event) => {
   const generalTags = parseTagInput(document.querySelector('#memory-tags').value);
   const activityTags = parseTagInput(document.querySelector('#memory-activity-tags').value);
   const emotionTags = parseTagInput(document.querySelector('#memory-emotion-tags').value);
-  const files = document.querySelector('#memory-media').files;
+  const files = [...document.querySelector('#memory-media').files].filter((f) => f.type.startsWith('image/'));
 
   if (!text) return;
 
-  const mediaDataUrls = await Promise.all(
-    [...files].filter((f) => f.type.startsWith('image/')).map(fileToDataUrl)
-  );
-
-  appState.memories.push({
+  const { data: inserted, error } = await sb.from('memories').insert({
+    user_id: appState.userId,
     text,
-    eventDate: eventDateInput || new Date().toISOString().slice(0, 10),
+    event_date: eventDateInput || new Date().toISOString().slice(0, 10),
     person,
     item,
     location,
     notes: '',
     tags: { general: generalTags, activity: activityTags, emotion: emotionTags },
-    pin: appState.draftPin,
-    mediaCount: files.length,
-    mediaDataUrls,
-    createdAt: new Date().toISOString(),
-  });
+    pin: appState.draftPin || null,
+  }).select().single();
+
+  if (error || !inserted) {
+    alert('Грешка при запазване на спомена.');
+    return;
+  }
+
+  const memoryId = inserted.id;
+
+  for (let i = 0; i < files.length; i++) {
+    await uploadMemPhotoFile(files[i], appState.userId, memoryId, i);
+  }
+
+  // Fetch full record with media
+  const { data: fullRow } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  if (fullRow) {
+    appState.memories.unshift(mapMemory(fullRow));
+  }
 
   appState.activeTag = null;
   appState.draftPin = null;
-  saveState();
   render();
   switchTab('create-memory');
   showHomeDashboard();
@@ -1278,9 +1442,38 @@ memoryForm.addEventListener('submit', async (event) => {
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 });
 
-loadState();
-setScreen();
 initMaps();
-render();
 switchTab('create-memory');
+setScreen(); // shows login by default
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
+
+sb.auth.getSession().then(async ({ data: { session } }) => {
+  if (session) {
+    appState.user = session.user.email;
+    appState.userId = session.user.id;
+    await loadData();
+    setScreen();
+    render();
+  }
+});
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN') {
+    appState.user = session.user.email;
+    appState.userId = session.user.id;
+    await loadData();
+    setScreen();
+    render();
+    switchTab('create-memory');
+  } else if (event === 'SIGNED_OUT') {
+    appState.user = null;
+    appState.userId = null;
+    appState.memories = [];
+    appState.people = [];
+    appState.activeTag = null;
+    appState.selectedPerson = null;
+    appState.selectedMemory = null;
+    setScreen();
+    render();
+  }
+});
