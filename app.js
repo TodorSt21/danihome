@@ -1262,21 +1262,28 @@ importFileInput.addEventListener('change', () => {
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = document.querySelector('#username').value.trim();
-  const password = document.querySelector('#password') ? document.querySelector('#password').value : '';
-  if (!email) return;
+  const password = document.querySelector('#password').value;
+  if (!email || !password) return;
+
+  // Clear any previous error
+  const prev = loginForm.querySelector('.login-error');
+  if (prev) prev.remove();
 
   const submitBtn = loginForm.querySelector('[type="submit"]');
-  if (submitBtn) submitBtn.disabled = true;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Влизане…';
 
   const { error } = await sb.auth.signInWithPassword({ email, password });
 
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Влез';
+
   if (error) {
-    const errEl = loginForm.querySelector('.login-error') || document.createElement('p');
-    errEl.className = 'login-error';
-    errEl.style.color = 'red';
+    const errEl = document.createElement('p');
+    errEl.className = 'login-error hint';
+    errEl.style.color = 'var(--danger, #dc2626)';
     errEl.textContent = error.message;
-    if (!loginForm.querySelector('.login-error')) loginForm.appendChild(errEl);
-    if (submitBtn) submitBtn.disabled = false;
+    loginForm.appendChild(errEl);
   }
 });
 
