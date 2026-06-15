@@ -1131,6 +1131,7 @@ detailEditForm.addEventListener('submit', async (event) => {
   }
 
   await loadData();
+  render();
   renderMemoryDetail();
   requestAnimationFrame(() => initDetailStaticMap());
   detailView.classList.remove('hidden');
@@ -1383,8 +1384,7 @@ peopleForm.addEventListener('submit', async (event) => {
   }
 
   await loadData();
-  renderPeople();
-  renderPersonDetail();
+  render();
   peopleForm.reset();
 });
 
