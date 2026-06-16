@@ -186,25 +186,30 @@ async function deleteMemoryById(id) {
 }
 
 async function uploadMemPhotoFile(file, userId, memoryId, position) {
-  const ext = file.name.split('.').pop();
+  const ext = file.name.split('.').pop() || 'jpg';
   const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
-  await sb.storage.from('memory-photos').upload(path, file);
-  await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, file);
+  if (upErr) throw new Error(upErr.message);
+  const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  if (dbErr) throw new Error(dbErr.message);
   return path;
 }
 
 async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
   const ext = blob.type.split('/')[1] || 'jpg';
   const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
-  await sb.storage.from('memory-photos').upload(path, blob);
-  await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, blob);
+  if (upErr) throw new Error(upErr.message);
+  const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
+  if (dbErr) throw new Error(dbErr.message);
   return path;
 }
 
 async function uploadPeoplePhotoBlob(blob, userId) {
   const ext = blob.type.split('/')[1] || 'jpg';
   const path = `${userId}/${Date.now()}.${ext}`;
-  await sb.storage.from('people-photos').upload(path, blob);
+  const { error } = await sb.storage.from('people-photos').upload(path, blob);
+  if (error) throw new Error(error.message);
   return path;
 }
 
@@ -1398,7 +1403,14 @@ peopleForm.addEventListener('submit', async (event) => {
 memoryForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
+  if (!appState.userId) {
+    alert('Не сте влезли в профила си.');
+    return;
+  }
+
   const text = document.querySelector('#memory-text').value.trim();
+  if (!text) return;
+
   const eventDateInput = document.querySelector('#memory-event-date').value;
   const item = document.querySelector('#memory-item').value.trim();
   const person = document.querySelector('#memory-person').value.trim();
@@ -1408,7 +1420,9 @@ memoryForm.addEventListener('submit', async (event) => {
   const emotionTags = parseTagInput(document.querySelector('#memory-emotion-tags').value);
   const files = [...document.querySelector('#memory-media').files].filter((f) => f.type.startsWith('image/'));
 
-  if (!text) return;
+  const submitBtn = memoryForm.querySelector('[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Запазване…';
 
   const { data: inserted, error } = await sb.from('memories').insert({
     user_id: appState.userId,
@@ -1422,18 +1436,25 @@ memoryForm.addEventListener('submit', async (event) => {
     pin: appState.draftPin || null,
   }).select().single();
 
-  if (error || !inserted) {
-    alert('Грешка при запазване на спомена.');
+  if (error) {
+    console.error('Memory insert error:', error);
+    alert(`Грешка при запазване: ${error.message}`);
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Запази спомен';
     return;
   }
 
   const memoryId = inserted.id;
 
   for (let i = 0; i < files.length; i++) {
-    await uploadMemPhotoFile(files[i], appState.userId, memoryId, i);
+    try {
+      await uploadMemPhotoFile(files[i], appState.userId, memoryId, i);
+    } catch (uploadErr) {
+      console.error('Photo upload error:', uploadErr);
+    }
   }
 
-  // Fetch full record with media
+  // Fetch the saved record with its media to update local state
   const { data: fullRow } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
   if (fullRow) {
     appState.memories.unshift(mapMemory(fullRow));
@@ -1441,12 +1462,15 @@ memoryForm.addEventListener('submit', async (event) => {
 
   appState.activeTag = null;
   appState.draftPin = null;
+  renderDraftPin();
   render();
   switchTab('create-memory');
   showHomeDashboard();
   memoryForm.reset();
   renderMediaPreview();
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Запази спомен';
 });
 
 initMaps();
