@@ -41,14 +41,17 @@ ALTER TABLE public.people ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memory_media ENABLE ROW LEVEL SECURITY;
 
 -- Memories: users only access their own rows
+DROP POLICY IF EXISTS "user_memories" ON public.memories;
 CREATE POLICY "user_memories" ON public.memories
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- People: users only access their own rows
+DROP POLICY IF EXISTS "user_people" ON public.people;
 CREATE POLICY "user_people" ON public.people
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- Memory media: accessible if the parent memory belongs to the user
+DROP POLICY IF EXISTS "user_memory_media" ON public.memory_media;
 CREATE POLICY "user_memory_media" ON public.memory_media
   FOR ALL
   USING  (EXISTS (SELECT 1 FROM public.memories WHERE id = memory_id AND user_id = auth.uid()))
@@ -64,6 +67,10 @@ CREATE POLICY "user_memory_media" ON public.memory_media
 -- ═══════════════════════════════════════════════════════════════
 
 -- memory-photos: only the owner can upload/delete; public read
+DROP POLICY IF EXISTS "mem_photos_upload" ON storage.objects;
+DROP POLICY IF EXISTS "mem_photos_delete" ON storage.objects;
+DROP POLICY IF EXISTS "mem_photos_read" ON storage.objects;
+
 CREATE POLICY "mem_photos_upload" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'memory-photos'
@@ -78,6 +85,10 @@ CREATE POLICY "mem_photos_read" ON storage.objects
   FOR SELECT USING (bucket_id = 'memory-photos');
 
 -- people-photos: same pattern
+DROP POLICY IF EXISTS "ppl_photos_upload" ON storage.objects;
+DROP POLICY IF EXISTS "ppl_photos_delete" ON storage.objects;
+DROP POLICY IF EXISTS "ppl_photos_read" ON storage.objects;
+
 CREATE POLICY "ppl_photos_upload" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'people-photos'
