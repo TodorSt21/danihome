@@ -2,7 +2,7 @@
   "name": "Памет",
   "short_name": "Памет",
   "description": "Твоите лични спомени",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#4f46e5",
@@ -10,13 +10,13 @@
   "lang": "bg",
   "icons": [
     {
-      "src": "/icons/icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
