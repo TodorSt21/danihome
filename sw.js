@@ -1,12 +1,11 @@
-const CACHE = 'pamet-v2';
+const CACHE = 'pamet-v3';
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/styles.css',
-  '/styles/design-system.css',
-  '/icons/icon.svg',
-  '/manifest.json',
+  'index.html',
+  'app.js',
+  'styles.css',
+  'styles/design-system.css',
+  'icons/icon.svg',
+  'manifest.json',
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,7 +43,7 @@ self.addEventListener('fetch', (event) => {
         .catch(() => {
           // Offline fallback for navigation requests
           if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
+            return caches.match('index.html');
           }
         });
     })
