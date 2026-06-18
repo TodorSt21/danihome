@@ -1482,7 +1482,7 @@ sb.auth.getSession().then(async ({ data: { session } }) => {
   if (session) {
     appState.user = session.user.email;
     appState.userId = session.user.id;
-    await loadData();
+    try { await loadData(); } catch (e) { console.error('loadData error:', e); }
     setScreen();
     render();
   }
@@ -1492,7 +1492,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN') {
     appState.user = session.user.email;
     appState.userId = session.user.id;
-    await loadData();
+    try { await loadData(); } catch (e) { console.error('loadData error:', e); }
     setScreen();
     render();
     switchTab('create-memory');
