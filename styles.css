@@ -305,9 +305,9 @@ button.tiny {
 }
 
 .stat-card .stat-icon {
-  font-size: 1.3rem;
-  display: block;
-  margin-bottom: 4px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
 }
 
 .stat-card strong {

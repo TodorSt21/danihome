@@ -359,11 +359,12 @@ function renderHomeSummary() {
     if (normalized) uniquePeople.add(normalized);
   });
 
+  const SVG = (d) => `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
   const stats = [
-    { label: 'Спомени', value: appState.memories.length, icon: '📸' },
-    { label: 'Хора', value: uniquePeople.size, icon: '👥' },
-    { label: 'Места', value: uniquePlaces.size, icon: '📍' },
-    { label: 'Снимки', value: photosCount, icon: '🖼️' },
+    { label: 'Спомени', value: appState.memories.length, icon: SVG('<rect x="2" y="7" width="20" height="15" rx="2.5"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="14" r="3"/>') },
+    { label: 'Хора',    value: uniquePeople.size,         icon: SVG('<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5"/><circle cx="18" cy="8" r="2.5"/><path d="M22 20c0-2.5-2-4-4-4"/>') },
+    { label: 'Места',   value: uniquePlaces.size,         icon: SVG('<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/>') },
+    { label: 'Снимки',  value: photosCount,               icon: SVG('<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>') },
   ];
 
   statsGrid.innerHTML = '';
