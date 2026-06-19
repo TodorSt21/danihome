@@ -18,7 +18,9 @@
       <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
       <section id="login-screen" class="screen active login-screen-layout">
         <div class="card login-card">
-          <div class="logo-badge">📸</div>
+          <div class="logo-badge">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V7l7-4 7 4v14"/><path d="M5 12l7 4 7-4"/></svg>
+          </div>
           <h1>ПАМЕТ</h1>
           <p class="hint">Твоите лични спомени</p>
           <form id="login-form" class="stacked-form">
@@ -52,11 +54,26 @@
         </header>
 
         <nav class="tabs bottom-nav" aria-label="Навигация">
-          <button class="tab-btn active" data-tab="create-memory"><span class="tab-icon">🏠</span><span>Home</span></button>
-          <button class="tab-btn" data-tab="timeline"><span class="tab-icon">🕒</span><span>Timeline</span></button>
-          <button class="tab-btn" data-tab="map"><span class="tab-icon">🗺️</span><span>Карта</span></button>
-          <button class="tab-btn" data-tab="people"><span class="tab-icon">👥</span><span>Хора</span></button>
-          <button class="tab-btn" data-tab="tags"><span class="tab-icon">#</span><span>Тагове</span></button>
+          <button class="tab-btn active" data-tab="create-memory">
+            <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+            <span>Home</span>
+          </button>
+          <button class="tab-btn" data-tab="timeline">
+            <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            <span>Timeline</span>
+          </button>
+          <button class="tab-btn" data-tab="map">
+            <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
+            <span>Карта</span>
+          </button>
+          <button class="tab-btn" data-tab="people">
+            <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+            <span>Хора</span>
+          </button>
+          <button class="tab-btn" data-tab="tags">
+            <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>
+            <span>Тагове</span>
+          </button>
         </nav>
 
         <!-- ── HOME TAB ──────────────────────────────────────────── -->
@@ -73,19 +90,19 @@
               <h3 class="section-title">Разгледай</h3>
               <div class="quick-nav-grid">
                 <button class="quick-nav-item" data-nav="timeline">
-                  <span class="quick-nav-icon">🕒</span>
+                  <svg class="quick-nav-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
                   <span>Timeline</span>
                 </button>
                 <button class="quick-nav-item" data-nav="tags">
-                  <span class="quick-nav-icon">#</span>
+                  <svg class="quick-nav-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>
                   <span>Тагове</span>
                 </button>
                 <button class="quick-nav-item" data-nav="people">
-                  <span class="quick-nav-icon">👥</span>
+                  <svg class="quick-nav-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
                   <span>Хора</span>
                 </button>
                 <button class="quick-nav-item" data-nav="map">
-                  <span class="quick-nav-icon">🗺️</span>
+                  <svg class="quick-nav-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>
                   <span>Карта</span>
                 </button>
               </div>
@@ -100,7 +117,7 @@
             </article>
 
             <article class="card on-this-day-card hidden" id="on-this-day-card">
-              <h3 class="section-title">🗓️ На тази дата</h3>
+              <h3 class="section-title" style="display:flex;align-items:center;gap:8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2.5"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>На тази дата</h3>
               <p class="hint" id="on-this-day-subtitle"></p>
               <ul id="on-this-day-list" class="memory-list compact"></ul>
             </article>
@@ -248,13 +265,21 @@
           </article>
         </section>
 
-        <button id="fab-add-memory" class="fab" type="button" aria-label="Добави спомен">＋</button>
+        <button id="fab-add-memory" class="fab" type="button" aria-label="Добави спомен">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
 
         <!-- ── MEMORY DETAIL OVERLAY ─────────────────────────────── -->
         <div id="memory-detail" class="memory-detail hidden" role="dialog" aria-modal="true">
           <div class="detail-topbar">
-            <button id="detail-back-btn" class="detail-back-btn" type="button">← Назад</button>
-            <button id="detail-edit-btn" class="ghost tiny" type="button">✏️ Редактирай</button>
+            <button id="detail-back-btn" class="detail-back-btn" type="button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+              Назад
+            </button>
+            <button id="detail-edit-btn" class="ghost tiny" type="button">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:3px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Редактирай
+            </button>
           </div>
 
           <!-- View mode -->

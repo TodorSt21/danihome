@@ -67,10 +67,10 @@ body {
   height: 64px;
   border-radius: 18px;
   margin: 0 auto 16px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(160deg, #3ECab8, #2BB0A0);
-  font-size: 1.8rem;
   box-shadow: 0 10px 24px rgba(42, 165, 151, 0.45);
 }
 
@@ -169,7 +169,8 @@ body {
 }
 
 .tab-btn .tab-icon {
-  font-size: 1.1rem;
+  display: block;
+  flex-shrink: 0;
 }
 
 .tab-btn.active {
@@ -358,7 +359,8 @@ button.tiny {
 }
 
 .quick-nav-icon {
-  font-size: 1.4rem;
+  display: block;
+  flex-shrink: 0;
 }
 
 /* ── MEMORY LISTS ───────────────────────────────────────────────── */
@@ -774,6 +776,9 @@ button.tiny {
   padding: 6px 0;
   box-shadow: none;
   font-family: 'DM Sans', system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .detail-gallery {
