@@ -526,7 +526,7 @@ function renderMapPins() {
     const leafletPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
     if (leafletPins.length > 0) {
       const bounds = L.latLngBounds(leafletPins.map((m) => [m.pin.lat, m.pin.lng]));
-      overviewMap.fitBounds(bounds.pad(0.2));
+      overviewMap.fitBounds(bounds.pad(0.5), { maxZoom: 11 });
     }
   } else {
     mapBoardEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
@@ -858,11 +858,13 @@ function renderMemoryDetail() {
   detailGallery.onscroll = null;
 
   if (memory.mediaDataUrls && memory.mediaDataUrls.length) {
-    memory.mediaDataUrls.forEach((url) => {
+    memory.mediaDataUrls.forEach((url, idx) => {
       const img = document.createElement('img');
       img.className = 'detail-gallery-img';
       img.src = url;
       img.alt = '';
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', () => openLightbox(memory.mediaDataUrls, idx));
       detailGallery.appendChild(img);
     });
     if (memory.mediaDataUrls.length > 1) {
@@ -1472,6 +1474,47 @@ memoryForm.addEventListener('submit', async (event) => {
   submitBtn.disabled = false;
   submitBtn.textContent = 'Запази спомен';
 });
+
+// ── Lightbox ────────────────────────────────────────────────────────
+const lightboxEl = document.querySelector('#lightbox');
+const lightboxGallery = document.querySelector('#lightbox-gallery');
+const lightboxCount = document.querySelector('#lightbox-count');
+
+function openLightbox(urls, startIndex = 0) {
+  lightboxGallery.innerHTML = '';
+  urls.forEach((url) => {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    lightboxGallery.appendChild(img);
+  });
+
+  lightboxEl.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
+  requestAnimationFrame(() => {
+    lightboxGallery.scrollLeft = startIndex * lightboxGallery.clientWidth;
+    updateLightboxCount();
+  });
+
+  lightboxGallery.onscroll = updateLightboxCount;
+
+  function updateLightboxCount() {
+    if (urls.length < 2) { lightboxCount.textContent = ''; return; }
+    const idx = Math.round(lightboxGallery.scrollLeft / lightboxGallery.clientWidth) + 1;
+    lightboxCount.textContent = `${idx} / ${urls.length}`;
+  }
+}
+
+function closeLightbox() {
+  lightboxEl.classList.add('hidden');
+  document.body.style.overflow = '';
+  lightboxGallery.innerHTML = '';
+}
+
+document.querySelector('#lightbox-close').addEventListener('click', closeLightbox);
+lightboxEl.addEventListener('click', (e) => { if (e.target === lightboxEl) closeLightbox(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
 
 initMaps();
 switchTab('create-memory');
