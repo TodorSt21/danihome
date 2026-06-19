@@ -160,9 +160,9 @@ body {
   display: grid;
   justify-items: center;
   gap: 2px;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.88);
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   font-family: 'DM Sans', system-ui, sans-serif;
