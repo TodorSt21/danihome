@@ -144,7 +144,7 @@ function mapMemory(row) {
     text: row.text || '',
     eventDate: row.event_date || row.created_at,
     location: row.location || '',
-    person: row.person || '',
+    persons: parsePeople(row.person),
     item: row.item || '',
     notes: row.notes || '',
     pin: normalizePin(row.pin),
@@ -294,6 +294,10 @@ function parseTagInput(raw) {
   return [...new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
 }
 
+function parsePeople(raw) {
+  return [...new Set((raw || '').split(',').map((s) => s.trim()).filter(Boolean))];
+}
+
 function buildTagEntries(memory) {
   return [
     ...memory.tags.general.map((value) => ({ type: 'general', value, label: `#${value}` })),
@@ -322,7 +326,7 @@ function formatEventDate(dateValue) {
 
 function getMemoryCover(memory) {
   if (memory.mediaDataUrls && memory.mediaDataUrls.length > 0) return memory.mediaDataUrls[0];
-  const personPhoto = memory.person ? getPersonPhoto(memory.person) : '';
+  const personPhoto = memory.persons.length ? getPersonPhoto(memory.persons[0]) : '';
   if (personPhoto) return personPhoto;
   return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="%233ECab8"/><stop offset="1" stop-color="%232BB0A0"/></linearGradient></defs><rect width="100%25" height="100%25" fill="url(%23g)"/><text x="50%25" y="52%25" font-size="42" text-anchor="middle" fill="white" font-family="DM Sans,Arial,sans-serif">Памет</text></svg>';
 }
@@ -365,8 +369,7 @@ function renderHomeSummary() {
   const photosCount = appState.memories.reduce((sum, memory) => sum + (memory.mediaCount || 0), 0);
   const uniquePeople = new Set(appState.people.map((person) => person.name.trim().toLowerCase()).filter(Boolean));
   appState.memories.forEach((memory) => {
-    const normalized = memory.person.trim().toLowerCase();
-    if (normalized) uniquePeople.add(normalized);
+    memory.persons.forEach((name) => uniquePeople.add(name.trim().toLowerCase()));
   });
 
   const SVG = (d) => `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -613,7 +616,7 @@ function passesSearchFilter(memory) {
   ].join(' ');
   return (
     memory.text.toLowerCase().includes(q) ||
-    memory.person.toLowerCase().includes(q) ||
+    memory.persons.some((p) => p.toLowerCase().includes(q)) ||
     memory.location.toLowerCase().includes(q) ||
     memory.item.toLowerCase().includes(q) ||
     allTags.toLowerCase().includes(q)
@@ -629,7 +632,7 @@ function getPersonPhoto(name) {
 
 function getMemoriesForPerson(name) {
   const lower = name.trim().toLowerCase();
-  return sortByEventDateDesc(appState.memories).filter((memory) => memory.person.trim().toLowerCase() === lower);
+  return sortByEventDateDesc(appState.memories).filter((memory) => memory.persons.some((p) => p.trim().toLowerCase() === lower));
 }
 
 function openPersonDetail(name) {
@@ -707,8 +710,8 @@ function renderTimeline() {
     else locationEl.remove();
 
     const personEl = clone.querySelector('.person');
-    if (memory.person) personEl.textContent = `👤 ${memory.person}`;
-    else personEl.remove();
+    if (memory.persons.length) personEl.textContent = `👤 ${memory.persons.join(', ')}`;
+    else personEl?.remove();
 
     const itemEl = clone.querySelector('.item');
     if (memory.item) itemEl.textContent = `🎒 ${memory.item}`;
@@ -764,7 +767,7 @@ function renderTimeline() {
 
 function renderPeople() {
   peopleList.innerHTML = '';
-  const namesFromMemories = toSetList(appState.memories.map((m) => m.person));
+  const namesFromMemories = toSetList(appState.memories.flatMap((m) => m.persons));
   const namesFromPeople = toSetList(appState.people.map((p) => p.name));
   const allNames = toSetList([...namesFromPeople, ...namesFromMemories]);
 
@@ -952,7 +955,7 @@ function renderMemoryDetail() {
     detailStaticMapEl.classList.add('hidden');
   }
 
-  setMetaRow(detailPersonEl,   '👤', memory.person);
+  setMetaRow(detailPersonEl,   '👤', memory.persons.join(', '));
   setMetaRow(detailItemEl,     '🎒', memory.item);
 
   // 7. Tags as chips
@@ -1054,7 +1057,7 @@ function enterEditMode() {
   editTextArea.value = memory.text;
   editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
   editLocation.value = memory.location || '';
-  editPerson.value = memory.person || '';
+  editPerson.value = memory.persons.join(', ');
   editItem.value = memory.item || '';
   editTags.value = (memory.tags?.general || []).join(', ');
   editActivityTags.value = (memory.tags?.activity || []).join(', ');
@@ -1225,7 +1228,7 @@ async function importData(file) {
           text: m.text || '',
           event_date: m.eventDate || m.event_date || new Date().toISOString().slice(0, 10),
           location: m.location || '',
-          person: m.person || '',
+          person: m.persons ? m.persons.join(', ') : (m.person || ''),
           item: m.item || '',
           notes: m.notes || '',
           pin: m.pin || null,
