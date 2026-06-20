@@ -145,7 +145,7 @@ function mapMemory(row) {
     eventDate: row.event_date || row.created_at,
     location: row.location || '',
     persons: parsePeople(row.person),
-    item: row.item || '',
+    items: parsePeople(row.item),
     notes: row.notes || '',
     pin: normalizePin(row.pin),
     tags: normalizeTagGroups(row.tags),
@@ -618,7 +618,7 @@ function passesSearchFilter(memory) {
     memory.text.toLowerCase().includes(q) ||
     memory.persons.some((p) => p.toLowerCase().includes(q)) ||
     memory.location.toLowerCase().includes(q) ||
-    memory.item.toLowerCase().includes(q) ||
+    memory.items.some((it) => it.toLowerCase().includes(q)) ||
     allTags.toLowerCase().includes(q)
   );
 }
@@ -714,8 +714,8 @@ function renderTimeline() {
     else personEl?.remove();
 
     const itemEl = clone.querySelector('.item');
-    if (memory.item) itemEl.textContent = `🎒 ${memory.item}`;
-    else itemEl.remove();
+    if (memory.items.length) itemEl.textContent = `🎒 ${memory.items.join(', ')}`;
+    else itemEl?.remove();
 
     const mediaEl = clone.querySelector('.media-count');
     if (memory.mediaCount) mediaEl.textContent = `🎞️ ${memory.mediaCount} файла`;
@@ -956,7 +956,7 @@ function renderMemoryDetail() {
   }
 
   setMetaRow(detailPersonEl,   '👤', memory.persons.join(', '));
-  setMetaRow(detailItemEl,     '🎒', memory.item);
+  setMetaRow(detailItemEl,     '🎒', memory.items.join(', '));
 
   // 7. Tags as chips
   detailTags.innerHTML = '';
@@ -1058,7 +1058,7 @@ function enterEditMode() {
   editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
   editLocation.value = memory.location || '';
   editPerson.value = memory.persons.join(', ');
-  editItem.value = memory.item || '';
+  editItem.value = memory.items.join(', ');
   editTags.value = (memory.tags?.general || []).join(', ');
   editActivityTags.value = (memory.tags?.activity || []).join(', ');
   editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
@@ -1229,7 +1229,7 @@ async function importData(file) {
           event_date: m.eventDate || m.event_date || new Date().toISOString().slice(0, 10),
           location: m.location || '',
           person: m.persons ? m.persons.join(', ') : (m.person || ''),
-          item: m.item || '',
+          item: m.items ? m.items.join(', ') : (m.item || ''),
           notes: m.notes || '',
           pin: m.pin || null,
           tags: m.tags || null,
