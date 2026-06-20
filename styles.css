@@ -169,7 +169,7 @@ body {
   transform: translateX(-50%);
   bottom: 14px;
   width: min(430px, calc(100vw - 20px));
-  z-index: 30;
+  z-index: 1100;
 }
 
 .tab-btn {
