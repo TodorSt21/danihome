@@ -99,6 +99,26 @@ body {
   flex-shrink: 0;
 }
 
+.btn-logout-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: none;
+  cursor: pointer;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+.btn-logout-header:active {
+  background: rgba(47, 182, 166, 0.1);
+}
+
 /* ── CARDS ──────────────────────────────────────────────────────── */
 
 .card {
