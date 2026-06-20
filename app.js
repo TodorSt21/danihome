@@ -168,6 +168,14 @@ async function loadData() {
     sb.from('people').select('*').eq('user_id', appState.userId),
   ]);
 
+  if (memoriesResult.error) {
+    console.error('loadData memories error:', memoriesResult.error);
+    throw new Error(memoriesResult.error.message);
+  }
+  if (peopleResult.error) {
+    console.error('loadData people error:', peopleResult.error);
+  }
+
   if (memoriesResult.data) {
     appState.memories = memoriesResult.data.map(mapMemory);
   }
@@ -1295,8 +1303,26 @@ loginForm.addEventListener('submit', async (event) => {
   }
 });
 
-logoutBtn.addEventListener('click', () => {
-  sb.auth.signOut();
+logoutBtn.addEventListener('click', async () => {
+  logoutBtn.disabled = true;
+  logoutBtn.textContent = '…';
+  try {
+    await sb.auth.signOut();
+  } catch (e) {
+    console.error('signOut error:', e);
+  }
+  // Force clean state regardless of whether the event fires
+  appState.user = null;
+  appState.userId = null;
+  appState.memories = [];
+  appState.people = [];
+  appState.activeTag = null;
+  appState.selectedPerson = null;
+  appState.selectedMemory = null;
+  setScreen();
+  render();
+  logoutBtn.disabled = false;
+  logoutBtn.textContent = 'Изход';
 });
 
 clearTagFilterBtn.addEventListener('click', () => {
@@ -1522,14 +1548,34 @@ switchTab('create-memory');
 setScreen(); // shows login by default
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 
+async function tryLoadData() {
+  try {
+    await loadData();
+  } catch (e) {
+    console.error('loadData error:', e);
+    showDataError(e.message);
+  }
+  render();
+}
+
+function showDataError(msg) {
+  const existing = document.querySelector('#data-load-error');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'data-load-error';
+  el.style.cssText = 'margin:12px 16px;padding:12px 14px;background:#fff0f0;border:1px solid #fca5a5;border-radius:14px;font-size:.85rem;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:10px';
+  el.innerHTML = `<span>Грешка при зареждане: ${msg}</span><button onclick="tryLoadData().then(()=>document.querySelector('#data-load-error')?.remove())" style="background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:99px;font-size:.8rem;font-weight:600;cursor:pointer;flex-shrink:0">Retry</button>`;
+  const panel = document.querySelector('#create-memory');
+  if (panel) panel.prepend(el);
+}
+
 sb.auth.getSession().then(async ({ data: { session } }) => {
   if (session) {
     appState.user = session.user.email;
     appState.userId = session.user.id;
     setScreen();
     render();
-    try { await loadData(); } catch (e) { console.error('loadData error:', e); }
-    render();
+    await tryLoadData();
   }
 });
 
@@ -1540,8 +1586,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     setScreen();
     render();
     switchTab('create-memory');
-    try { await loadData(); } catch (e) { console.error('loadData error:', e); }
-    render();
+    await tryLoadData();
   } else if (event === 'SIGNED_OUT') {
     appState.user = null;
     appState.userId = null;
