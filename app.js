@@ -1154,7 +1154,7 @@ detailEditForm.addEventListener('submit', async (event) => {
   };
 
   // Update memory row in Supabase
-  await sb.from('memories').update({
+  const { error: updateError } = await sb.from('memories').update({
     text: newText,
     event_date: newEventDate,
     location: newLocation,
@@ -1164,6 +1164,12 @@ detailEditForm.addEventListener('submit', async (event) => {
     pin: editDraftPin,
     tags: newTags,
   }).eq('id', memoryId);
+
+  if (updateError) {
+    console.error('Memory update error:', updateError);
+    alert(`Грешка при запазване: ${updateError.message}`);
+    return;
+  }
 
   // Remove deleted photos
   if (editRemovedPhotoIndices.size > 0) {
@@ -1184,7 +1190,26 @@ detailEditForm.addEventListener('submit', async (event) => {
     await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
   }
 
-  await loadData();
+  // Re-fetch only the edited memory so the rest of appState.memories is untouched
+  const { data: updatedRow } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  const idx = appState.memories.findIndex((m) => m.createdAt === memoryId);
+  if (idx !== -1) {
+    appState.memories[idx] = mapMemory(updatedRow ?? {
+      id: memoryId,
+      text: newText,
+      event_date: newEventDate,
+      location: newLocation,
+      person: newPerson,
+      item: newItem,
+      notes: newNotes,
+      pin: editDraftPin,
+      tags: newTags,
+      memory_media: (memory.mediaPaths || [])
+        .filter((_, i) => !editRemovedPhotoIndices.has(i))
+        .map((p, i) => ({ storage_path: p, position: i })),
+    });
+  }
+
   render();
   renderMemoryDetail();
   requestAnimationFrame(() => initDetailStaticMap());
