@@ -119,6 +119,7 @@ let appState = {
   draftPin: null,
   selectedPerson: null,
   selectedMemory: null,
+  loading: false,
 };
 
 let mapMode = 'fallback';
@@ -416,7 +417,7 @@ function renderHomeSummary() {
   if (!homeRecentList.children.length) {
     const li = document.createElement('li');
     li.className = 'empty-state';
-    li.textContent = 'Все още няма добавени спомени.';
+    li.textContent = appState.loading ? 'Зареждане…' : 'Все още няма добавени спомени.';
     homeRecentList.appendChild(li);
   }
 }
@@ -756,11 +757,13 @@ function renderTimeline() {
   if (!sortedMemories.length) {
     const empty = document.createElement('li');
     empty.className = 'empty-state';
-    empty.textContent = searchQuery
-      ? `Няма резултати за „${searchQuery}".`
-      : appState.activeTag
-        ? 'Няма спомени за избрания филтър.'
-        : 'Все още няма добавени спомени.';
+    empty.textContent = appState.loading
+      ? 'Зареждане…'
+      : searchQuery
+        ? `Няма резултати за „${searchQuery}".`
+        : appState.activeTag
+          ? 'Няма спомени за избрания филтър.'
+          : 'Все още няма добавени спомени.';
     timelineList.appendChild(empty);
   }
 }
@@ -1383,6 +1386,7 @@ logoutBtn.addEventListener('click', async () => {
   appState.draftPin = null;
   appState.selectedPerson = null;
   appState.selectedMemory = null;
+  appState.loading = false;
   searchQuery = '';
   detailReturnTab = 'timeline';
   if (timelineSearchInput) timelineSearchInput.value = '';
@@ -1618,6 +1622,8 @@ document.querySelector('#memory-event-date').value = new Date().toISOString().sl
 async function tryLoadData() {
   if (dataLoadInProgress) return;
   dataLoadInProgress = true;
+  appState.loading = true;
+  render();
   try {
     await loadData();
   } catch (e) {
@@ -1625,6 +1631,7 @@ async function tryLoadData() {
     showDataError(e.message);
   } finally {
     dataLoadInProgress = false;
+    appState.loading = false;
   }
   render();
 }
@@ -1675,6 +1682,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     appState.draftPin = null;
     appState.selectedPerson = null;
     appState.selectedMemory = null;
+    appState.loading = false;
     searchQuery = '';
     detailReturnTab = 'timeline';
     if (timelineSearchInput) timelineSearchInput.value = '';
