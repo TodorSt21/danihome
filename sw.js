@@ -1,4 +1,4 @@
-const CACHE = 'pamet-v7';
+const CACHE = 'pamet-v8';
 const PRECACHE = [
   'index.html',
   'app.js',
@@ -21,8 +21,8 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
       .then((clients) => clients.forEach((client) => client.postMessage({ type: 'SW_UPDATED' })))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {

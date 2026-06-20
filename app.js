@@ -81,6 +81,8 @@ let editPickerMap;
 let editPickerMarker;
 let editDraftPin = null;
 let editRemovedPhotoIndices = new Set();
+let editFallbackClickHandler = null;
+let dataLoadInProgress = false;
 
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
@@ -396,10 +398,10 @@ function renderHomeSummary() {
       if (memory.location) locationEl.textContent = `📍 ${memory.location}`;
       else locationEl.remove();
 
-      clone.querySelector('.person').remove();
-      clone.querySelector('.item').remove();
-      clone.querySelector('.media-count').remove();
-      clone.querySelector('.memory-tags').remove();
+      clone.querySelector('.person')?.remove();
+      clone.querySelector('.item')?.remove();
+      clone.querySelector('.media-count')?.remove();
+      clone.querySelector('.memory-tags')?.remove();
 
       const cardItem = clone.querySelector('.memory-item');
       cardItem.style.cursor = 'pointer';
@@ -442,13 +444,21 @@ function renderOnThisDay() {
     const li = document.createElement('li');
     li.className = 'memory-item memory-card';
     li.style.cursor = 'pointer';
-    li.innerHTML = `
-      <img class="memory-photo" src="${getMemoryCover(memory)}" alt="" />
-      <div class="memory-card-body">
-        <span class="on-this-day-year">${year}</span>
-        <strong>${memory.text.slice(0, 60)}</strong>
-        <small>${memory.location ? `📍 ${memory.location}` : ''}</small>
-      </div>`;
+    const img = document.createElement('img');
+    img.className = 'memory-photo';
+    img.src = getMemoryCover(memory);
+    img.alt = '';
+    const body = document.createElement('div');
+    body.className = 'memory-card-body';
+    const yearSpan = document.createElement('span');
+    yearSpan.className = 'on-this-day-year';
+    yearSpan.textContent = String(year);
+    const strong = document.createElement('strong');
+    strong.textContent = memory.text.slice(0, 60);
+    const small = document.createElement('small');
+    if (memory.location) small.textContent = `📍 ${memory.location}`;
+    body.append(yearSpan, strong, small);
+    li.append(img, body);
     li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
     onThisDayList.appendChild(li);
   });
@@ -651,7 +661,13 @@ function renderPersonDetail() {
   relatedMemories.forEach((memory) => {
     const li = document.createElement('li');
     li.className = 'memory-item';
-    li.innerHTML = `<strong>🗓️ ${formatEventDate(memory.eventDate)}</strong><p>${memory.text}</p><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small>`;
+    const dateStrong = document.createElement('strong');
+    dateStrong.textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
+    const textP = document.createElement('p');
+    textP.textContent = memory.text;
+    const locationSmall = document.createElement('small');
+    locationSmall.textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
+    li.append(dateStrong, textP, locationSmall);
     personDetailMemories.appendChild(li);
   });
 
@@ -1016,14 +1032,18 @@ function initEditMap(existingPin) {
       editPickerMap.setView([existingPin.lat, existingPin.lng], 13);
     }
   } else {
-    editPinPickerEl.addEventListener('click', (e) => {
+    if (editFallbackClickHandler) {
+      editPinPickerEl.removeEventListener('click', editFallbackClickHandler);
+    }
+    editFallbackClickHandler = (e) => {
       const rect = editPinPickerEl.getBoundingClientRect();
       editDraftPin = {
         x: ((e.clientX - rect.left) / rect.width) * 100,
         y: ((e.clientY - rect.top) / rect.height) * 100,
       };
       renderEditPin();
-    });
+    };
+    editPinPickerEl.addEventListener('click', editFallbackClickHandler);
   }
 }
 
@@ -1332,8 +1352,13 @@ logoutBtn.addEventListener('click', async () => {
   appState.memories = [];
   appState.people = [];
   appState.activeTag = null;
+  appState.draftPin = null;
   appState.selectedPerson = null;
   appState.selectedMemory = null;
+  searchQuery = '';
+  detailReturnTab = 'timeline';
+  if (timelineSearchInput) timelineSearchInput.value = '';
+  if (timelineSearchClear) timelineSearchClear.classList.add('hidden');
   setScreen();
   render();
   logoutBtn.disabled = false;
@@ -1563,11 +1588,15 @@ setScreen(); // shows login by default
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 
 async function tryLoadData() {
+  if (dataLoadInProgress) return;
+  dataLoadInProgress = true;
   try {
     await loadData();
   } catch (e) {
     console.error('loadData error:', e);
     showDataError(e.message);
+  } finally {
+    dataLoadInProgress = false;
   }
   render();
 }
@@ -1578,7 +1607,15 @@ function showDataError(msg) {
   const el = document.createElement('div');
   el.id = 'data-load-error';
   el.style.cssText = 'margin:12px 16px;padding:12px 14px;background:#fff0f0;border:1px solid #fca5a5;border-radius:14px;font-size:.85rem;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:10px';
-  el.innerHTML = `<span>Грешка при зареждане: ${msg}</span><button onclick="tryLoadData().then(()=>document.querySelector('#data-load-error')?.remove())" style="background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:99px;font-size:.8rem;font-weight:600;cursor:pointer;flex-shrink:0">Retry</button>`;
+  const span = document.createElement('span');
+  span.textContent = `Грешка при зареждане: ${msg}`;
+  const retryBtn = document.createElement('button');
+  retryBtn.textContent = 'Retry';
+  retryBtn.style.cssText = 'background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:99px;font-size:.8rem;font-weight:600;cursor:pointer;flex-shrink:0';
+  retryBtn.addEventListener('click', () => {
+    tryLoadData().then(() => document.querySelector('#data-load-error')?.remove());
+  });
+  el.append(span, retryBtn);
   const panel = document.querySelector('#create-memory');
   if (panel) panel.prepend(el);
 }
@@ -1607,8 +1644,13 @@ sb.auth.onAuthStateChange(async (event, session) => {
     appState.memories = [];
     appState.people = [];
     appState.activeTag = null;
+    appState.draftPin = null;
     appState.selectedPerson = null;
     appState.selectedMemory = null;
+    searchQuery = '';
+    detailReturnTab = 'timeline';
+    if (timelineSearchInput) timelineSearchInput.value = '';
+    if (timelineSearchClear) timelineSearchClear.classList.add('hidden');
     setScreen();
     render();
   }
