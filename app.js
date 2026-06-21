@@ -1660,7 +1660,6 @@ sb.auth.getSession().then(async ({ data: { session } }) => {
     appState.user = session.user.email;
     appState.userId = session.user.id;
     setScreen();
-    render();
     await tryLoadData();
   }
 });
@@ -1670,7 +1669,6 @@ sb.auth.onAuthStateChange(async (event, session) => {
     appState.user = session.user.email;
     appState.userId = session.user.id;
     setScreen();
-    render();
     switchTab('create-memory');
     await tryLoadData();
   } else if (event === 'SIGNED_OUT') {
