@@ -189,9 +189,16 @@ async function loadData() {
 
 async function deleteMemoryById(id) {
   const memory = appState.memories.find((m) => m.createdAt === id);
-  await sb.from('memories').delete().eq('id', id);
+  const { error } = await sb.from('memories').delete().eq('id', id).eq('user_id', appState.userId);
+  if (error) {
+    console.error('deleteMemory error:', error);
+    alert(`Грешка при изтриване: ${error.message}`);
+    return;
+  }
   if (memory && memory.mediaPaths && memory.mediaPaths.length) {
-    await sb.storage.from('memory-photos').remove(memory.mediaPaths);
+    await sb.from('memory_media').delete().eq('memory_id', id);
+    const { error: storageErr } = await sb.storage.from('memory-photos').remove(memory.mediaPaths);
+    if (storageErr) console.error('Storage remove error:', storageErr);
   }
   appState.memories = appState.memories.filter((m) => m.createdAt !== id);
 }
@@ -202,7 +209,10 @@ async function uploadMemPhotoFile(file, userId, memoryId, position) {
   const { error: upErr } = await sb.storage.from('memory-photos').upload(path, file);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
-  if (dbErr) throw new Error(dbErr.message);
+  if (dbErr) {
+    await sb.storage.from('memory-photos').remove([path]);
+    throw new Error(dbErr.message);
+  }
   return path;
 }
 
@@ -212,7 +222,10 @@ async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
   const { error: upErr } = await sb.storage.from('memory-photos').upload(path, blob);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
-  if (dbErr) throw new Error(dbErr.message);
+  if (dbErr) {
+    await sb.storage.from('memory-photos').remove([path]);
+    throw new Error(dbErr.message);
+  }
   return path;
 }
 
@@ -1166,7 +1179,7 @@ detailEditForm.addEventListener('submit', async (event) => {
     notes: newNotes,
     pin: editDraftPin,
     tags: newTags,
-  }).eq('id', memoryId);
+  }).eq('id', memoryId).eq('user_id', appState.userId);
 
   if (updateError) {
     console.error('Memory update error:', updateError);
@@ -1178,25 +1191,34 @@ detailEditForm.addEventListener('submit', async (event) => {
   if (editRemovedPhotoIndices.size > 0) {
     const removedPaths = (memory.mediaPaths || []).filter((_, i) => editRemovedPhotoIndices.has(i));
     if (removedPaths.length) {
-      // Delete memory_media rows for removed paths
       for (const path of removedPaths) {
-        await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+        const { error: delRowErr } = await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+        if (delRowErr) console.error('memory_media delete error:', delRowErr);
       }
-      await sb.storage.from('memory-photos').remove(removedPaths);
+      const { error: delStorageErr } = await sb.storage.from('memory-photos').remove(removedPaths);
+      if (delStorageErr) console.error('Storage remove error:', delStorageErr);
     }
   }
 
-  // Upload new photos
+  // Upload new photos, collect successfully uploaded paths for the fallback
   const newFiles = [...editMediaInput.files].filter((f) => f.type.startsWith('image/'));
   const existingCount = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i)).length;
+  const uploadedPaths = [];
   for (let i = 0; i < newFiles.length; i++) {
-    await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
+    try {
+      const p = await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
+      uploadedPaths.push(p);
+    } catch (uploadErr) {
+      console.error('Photo upload error:', uploadErr);
+    }
   }
 
   // Re-fetch only the edited memory so the rest of appState.memories is untouched
-  const { data: updatedRow } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  const { data: updatedRow, error: refetchErr } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  if (refetchErr) console.error('Memory re-fetch error:', refetchErr);
   const idx = appState.memories.findIndex((m) => m.createdAt === memoryId);
   if (idx !== -1) {
+    const keptPaths = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i));
     appState.memories[idx] = mapMemory(updatedRow ?? {
       id: memoryId,
       text: newText,
@@ -1207,9 +1229,7 @@ detailEditForm.addEventListener('submit', async (event) => {
       notes: newNotes,
       pin: editDraftPin,
       tags: newTags,
-      memory_media: (memory.mediaPaths || [])
-        .filter((_, i) => !editRemovedPhotoIndices.has(i))
-        .map((p, i) => ({ storage_path: p, position: i })),
+      memory_media: [...keptPaths, ...uploadedPaths].map((p, i) => ({ storage_path: p, position: i })),
     });
   }
 
@@ -1243,12 +1263,12 @@ async function importData(file) {
         return;
       }
 
-      // Deduplicate by text+eventDate
+      // Deduplicate by text+eventDate (never fall back to UUID/createdAt)
       const existingKeys = new Set(appState.memories.map((m) => `${m.text}|${m.eventDate}`));
       let importedMemories = 0;
 
       for (const m of incomingMemories) {
-        const key = `${m.text}|${m.eventDate || m.createdAt}`;
+        const key = `${m.text}|${m.eventDate || m.event_date || ''}`;
         if (existingKeys.has(key)) continue;
 
         const { data: inserted, error } = await sb.from('memories').insert({
@@ -1275,6 +1295,7 @@ async function importData(file) {
               blob = dataUrlToBlob(url);
             } else {
               const resp = await fetch(url);
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               blob = await resp.blob();
             }
             await uploadMemPhotoBlob(blob, appState.userId, newMemId, i);
@@ -1302,6 +1323,7 @@ async function importData(file) {
               blob = dataUrlToBlob(p.photoDataUrl);
             } else {
               const resp = await fetch(p.photoDataUrl);
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               blob = await resp.blob();
             }
             photoPath = await uploadPeoplePhotoBlob(blob, appState.userId);
@@ -1310,21 +1332,25 @@ async function importData(file) {
           }
         }
 
-        await sb.from('people').insert({
+        const { error: peopleInsertErr } = await sb.from('people').insert({
           user_id: appState.userId,
           name: p.name,
           photo_url: photoPath || null,
         });
 
-        importedPeople++;
-        existingPeopleNames.add(p.name.toLowerCase());
+        if (!peopleInsertErr) {
+          importedPeople++;
+          existingPeopleNames.add(p.name.toLowerCase());
+        } else {
+          console.error('People import insert error:', peopleInsertErr);
+        }
       }
 
-      await loadData();
-      render();
+      await tryLoadData();
       alert(`Импортирани: ${importedMemories} спомена, ${importedPeople} хора.`);
-    } catch {
-      alert('Грешка при четене на файла. Уверете се, че е валиден JSON.');
+    } catch (err) {
+      console.error('Import error:', err);
+      alert(`Грешка при импорт: ${err?.message || 'Уверете се, че файлът е валиден JSON.'}`);
     }
   };
   reader.readAsText(file);
@@ -1461,6 +1487,8 @@ tabButtons.forEach((btn) =>
 peopleForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
+  if (!appState.userId) { alert('Не сте влезли в профила си.'); return; }
+
   const nameInput = document.querySelector('#people-name');
   const fileInput = document.querySelector('#people-photo');
   const name = nameInput.value.trim();
@@ -1471,33 +1499,37 @@ peopleForm.addEventListener('submit', async (event) => {
   let photoPath = existingPerson ? existingPerson.photoPath : '';
 
   if (fileInput.files[0]) {
-    // Upload new photo blob
-    const file = fileInput.files[0];
-    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
-    const newPath = await uploadPeoplePhotoBlob(blob, appState.userId);
-
-    // Delete old photo from storage if updating
-    if (existingPerson && existingPerson.photoPath) {
-      await sb.storage.from('people-photos').remove([existingPerson.photoPath]);
+    try {
+      const file = fileInput.files[0];
+      const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+      const newPath = await uploadPeoplePhotoBlob(blob, appState.userId);
+      // Delete old photo only after new upload succeeds
+      if (existingPerson && existingPerson.photoPath) {
+        await sb.storage.from('people-photos').remove([existingPerson.photoPath]);
+      }
+      photoPath = newPath;
+    } catch (uploadErr) {
+      console.error('People photo upload error:', uploadErr);
+      alert(`Грешка при качване на снимка: ${uploadErr.message}`);
+      return;
     }
-
-    photoPath = newPath;
   }
 
   if (existingPerson) {
-    await sb.from('people').update({
+    const { error } = await sb.from('people').update({
       photo_url: photoPath || null,
-    }).eq('id', existingPerson.id);
+    }).eq('id', existingPerson.id).eq('user_id', appState.userId);
+    if (error) { alert(`Грешка при запазване: ${error.message}`); return; }
   } else {
-    await sb.from('people').insert({
+    const { error } = await sb.from('people').insert({
       user_id: appState.userId,
       name,
       photo_url: photoPath || null,
     });
+    if (error) { alert(`Грешка при запазване: ${error.message}`); return; }
   }
 
-  await loadData();
-  render();
+  await tryLoadData();
   peopleForm.reset();
 });
 
@@ -1621,6 +1653,7 @@ document.querySelector('#memory-event-date').value = new Date().toISOString().sl
 
 async function tryLoadData() {
   if (dataLoadInProgress) return;
+  if (!appState.userId) return;
   dataLoadInProgress = true;
   appState.loading = true;
   render();
