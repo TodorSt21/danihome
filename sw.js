@@ -1,4 +1,4 @@
-const CACHE = 'pamet-v10';
+const CACHE = 'pamet-v11';
 const PRECACHE = [
   'index.html',
   'app.js',

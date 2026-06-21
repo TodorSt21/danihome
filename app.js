@@ -1655,21 +1655,16 @@ function showDataError(msg) {
   if (panel) panel.prepend(el);
 }
 
-sb.auth.getSession().then(async ({ data: { session } }) => {
-  if (session) {
-    appState.user = session.user.email;
-    appState.userId = session.user.id;
-    setScreen();
-    await tryLoadData();
-  }
-});
-
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN') {
+  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+    if (!session) {
+      setScreen();
+      return;
+    }
     appState.user = session.user.email;
     appState.userId = session.user.id;
     setScreen();
-    switchTab('create-memory');
+    if (event === 'SIGNED_IN') switchTab('create-memory');
     await tryLoadData();
   } else if (event === 'SIGNED_OUT') {
     appState.user = null;
