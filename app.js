@@ -617,6 +617,7 @@ function renderMapPins() {
 
 function passesTagFilter(memory) {
   if (!appState.activeTag) return true;
+  if (appState.activeTag.type === 'item') return memory.items.includes(appState.activeTag.value);
   return memory.tags[appState.activeTag.type].includes(appState.activeTag.value);
 }
 
@@ -827,7 +828,11 @@ function renderPeople() {
 function renderTags() {
   tagsList.innerHTML = '';
   const seen = new Set();
-  appState.memories.flatMap(buildTagEntries).forEach((entry) => {
+  const allEntries = [
+    ...appState.memories.flatMap((m) => m.items.map((value) => ({ type: 'item', value, label: `🎒 ${value}` }))),
+    ...appState.memories.flatMap(buildTagEntries),
+  ];
+  allEntries.forEach((entry) => {
     const key = `${entry.type}:${entry.value}`;
     if (seen.has(key)) return;
     seen.add(key);
