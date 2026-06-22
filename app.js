@@ -81,6 +81,8 @@ let editPickerMap;
 let editPickerMarker;
 let editDraftPin = null;
 let editRemovedPhotoIndices = new Set();
+let editFallbackClickHandler = null;
+let dataLoadInProgress = false;
 
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
@@ -117,6 +119,7 @@ let appState = {
   draftPin: null,
   selectedPerson: null,
   selectedMemory: null,
+  loading: false,
 };
 
 let mapMode = 'fallback';
@@ -142,8 +145,8 @@ function mapMemory(row) {
     text: row.text || '',
     eventDate: row.event_date || row.created_at,
     location: row.location || '',
-    person: row.person || '',
-    item: row.item || '',
+    persons: parsePeople(row.person),
+    items: parsePeople(row.item),
     notes: row.notes || '',
     pin: normalizePin(row.pin),
     tags: normalizeTagGroups(row.tags),
@@ -186,9 +189,16 @@ async function loadData() {
 
 async function deleteMemoryById(id) {
   const memory = appState.memories.find((m) => m.createdAt === id);
-  await sb.from('memories').delete().eq('id', id);
+  const { error } = await sb.from('memories').delete().eq('id', id).eq('user_id', appState.userId);
+  if (error) {
+    console.error('deleteMemory error:', error);
+    alert(`Грешка при изтриване: ${error.message}`);
+    return;
+  }
   if (memory && memory.mediaPaths && memory.mediaPaths.length) {
-    await sb.storage.from('memory-photos').remove(memory.mediaPaths);
+    await sb.from('memory_media').delete().eq('memory_id', id);
+    const { error: storageErr } = await sb.storage.from('memory-photos').remove(memory.mediaPaths);
+    if (storageErr) console.error('Storage remove error:', storageErr);
   }
   appState.memories = appState.memories.filter((m) => m.createdAt !== id);
 }
@@ -199,7 +209,10 @@ async function uploadMemPhotoFile(file, userId, memoryId, position) {
   const { error: upErr } = await sb.storage.from('memory-photos').upload(path, file);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
-  if (dbErr) throw new Error(dbErr.message);
+  if (dbErr) {
+    await sb.storage.from('memory-photos').remove([path]);
+    throw new Error(dbErr.message);
+  }
   return path;
 }
 
@@ -209,7 +222,10 @@ async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
   const { error: upErr } = await sb.storage.from('memory-photos').upload(path, blob);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
-  if (dbErr) throw new Error(dbErr.message);
+  if (dbErr) {
+    await sb.storage.from('memory-photos').remove([path]);
+    throw new Error(dbErr.message);
+  }
   return path;
 }
 
@@ -292,6 +308,10 @@ function parseTagInput(raw) {
   return [...new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
 }
 
+function parsePeople(raw) {
+  return [...new Set((raw || '').split(',').map((s) => s.trim()).filter(Boolean))];
+}
+
 function buildTagEntries(memory) {
   return [
     ...memory.tags.general.map((value) => ({ type: 'general', value, label: `#${value}` })),
@@ -320,7 +340,7 @@ function formatEventDate(dateValue) {
 
 function getMemoryCover(memory) {
   if (memory.mediaDataUrls && memory.mediaDataUrls.length > 0) return memory.mediaDataUrls[0];
-  const personPhoto = memory.person ? getPersonPhoto(memory.person) : '';
+  const personPhoto = memory.persons.length ? getPersonPhoto(memory.persons[0]) : '';
   if (personPhoto) return personPhoto;
   return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="460"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="%233ECab8"/><stop offset="1" stop-color="%232BB0A0"/></linearGradient></defs><rect width="100%25" height="100%25" fill="url(%23g)"/><text x="50%25" y="52%25" font-size="42" text-anchor="middle" fill="white" font-family="DM Sans,Arial,sans-serif">Памет</text></svg>';
 }
@@ -363,8 +383,7 @@ function renderHomeSummary() {
   const photosCount = appState.memories.reduce((sum, memory) => sum + (memory.mediaCount || 0), 0);
   const uniquePeople = new Set(appState.people.map((person) => person.name.trim().toLowerCase()).filter(Boolean));
   appState.memories.forEach((memory) => {
-    const normalized = memory.person.trim().toLowerCase();
-    if (normalized) uniquePeople.add(normalized);
+    memory.persons.forEach((name) => uniquePeople.add(name.trim().toLowerCase()));
   });
 
   const SVG = (d) => `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -396,10 +415,10 @@ function renderHomeSummary() {
       if (memory.location) locationEl.textContent = `📍 ${memory.location}`;
       else locationEl.remove();
 
-      clone.querySelector('.person').remove();
-      clone.querySelector('.item').remove();
-      clone.querySelector('.media-count').remove();
-      clone.querySelector('.memory-tags').remove();
+      clone.querySelector('.person')?.remove();
+      clone.querySelector('.item')?.remove();
+      clone.querySelector('.media-count')?.remove();
+      clone.querySelector('.memory-tags')?.remove();
 
       const cardItem = clone.querySelector('.memory-item');
       cardItem.style.cursor = 'pointer';
@@ -411,7 +430,7 @@ function renderHomeSummary() {
   if (!homeRecentList.children.length) {
     const li = document.createElement('li');
     li.className = 'empty-state';
-    li.textContent = 'Все още няма добавени спомени.';
+    li.textContent = appState.loading ? 'Зареждане…' : 'Все още няма добавени спомени.';
     homeRecentList.appendChild(li);
   }
 }
@@ -442,13 +461,21 @@ function renderOnThisDay() {
     const li = document.createElement('li');
     li.className = 'memory-item memory-card';
     li.style.cursor = 'pointer';
-    li.innerHTML = `
-      <img class="memory-photo" src="${getMemoryCover(memory)}" alt="" />
-      <div class="memory-card-body">
-        <span class="on-this-day-year">${year}</span>
-        <strong>${memory.text.slice(0, 60)}</strong>
-        <small>${memory.location ? `📍 ${memory.location}` : ''}</small>
-      </div>`;
+    const img = document.createElement('img');
+    img.className = 'memory-photo';
+    img.src = getMemoryCover(memory);
+    img.alt = '';
+    const body = document.createElement('div');
+    body.className = 'memory-card-body';
+    const yearSpan = document.createElement('span');
+    yearSpan.className = 'on-this-day-year';
+    yearSpan.textContent = String(year);
+    const strong = document.createElement('strong');
+    strong.textContent = memory.text.slice(0, 60);
+    const small = document.createElement('small');
+    if (memory.location) small.textContent = `📍 ${memory.location}`;
+    body.append(yearSpan, strong, small);
+    li.append(img, body);
     li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
     onThisDayList.appendChild(li);
   });
@@ -603,9 +630,9 @@ function passesSearchFilter(memory) {
   ].join(' ');
   return (
     memory.text.toLowerCase().includes(q) ||
-    memory.person.toLowerCase().includes(q) ||
+    memory.persons.some((p) => p.toLowerCase().includes(q)) ||
     memory.location.toLowerCase().includes(q) ||
-    memory.item.toLowerCase().includes(q) ||
+    memory.items.some((it) => it.toLowerCase().includes(q)) ||
     allTags.toLowerCase().includes(q)
   );
 }
@@ -619,7 +646,7 @@ function getPersonPhoto(name) {
 
 function getMemoriesForPerson(name) {
   const lower = name.trim().toLowerCase();
-  return sortByEventDateDesc(appState.memories).filter((memory) => memory.person.trim().toLowerCase() === lower);
+  return sortByEventDateDesc(appState.memories).filter((memory) => memory.persons.some((p) => p.trim().toLowerCase() === lower));
 }
 
 function openPersonDetail(name) {
@@ -651,7 +678,13 @@ function renderPersonDetail() {
   relatedMemories.forEach((memory) => {
     const li = document.createElement('li');
     li.className = 'memory-item';
-    li.innerHTML = `<strong>🗓️ ${formatEventDate(memory.eventDate)}</strong><p>${memory.text}</p><small>${memory.location ? `📍 ${memory.location}` : '📍 Без локация'}</small>`;
+    const dateStrong = document.createElement('strong');
+    dateStrong.textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
+    const textP = document.createElement('p');
+    textP.textContent = memory.text;
+    const locationSmall = document.createElement('small');
+    locationSmall.textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
+    li.append(dateStrong, textP, locationSmall);
     personDetailMemories.appendChild(li);
   });
 
@@ -691,12 +724,12 @@ function renderTimeline() {
     else locationEl.remove();
 
     const personEl = clone.querySelector('.person');
-    if (memory.person) personEl.textContent = `👤 ${memory.person}`;
-    else personEl.remove();
+    if (memory.persons.length) personEl.textContent = `👤 ${memory.persons.join(', ')}`;
+    else personEl?.remove();
 
     const itemEl = clone.querySelector('.item');
-    if (memory.item) itemEl.textContent = `🎒 ${memory.item}`;
-    else itemEl.remove();
+    if (memory.items.length) itemEl.textContent = `🎒 ${memory.items.join(', ')}`;
+    else itemEl?.remove();
 
     const mediaEl = clone.querySelector('.media-count');
     if (memory.mediaCount) mediaEl.textContent = `🎞️ ${memory.mediaCount} файла`;
@@ -737,18 +770,20 @@ function renderTimeline() {
   if (!sortedMemories.length) {
     const empty = document.createElement('li');
     empty.className = 'empty-state';
-    empty.textContent = searchQuery
-      ? `Няма резултати за „${searchQuery}".`
-      : appState.activeTag
-        ? 'Няма спомени за избрания филтър.'
-        : 'Все още няма добавени спомени.';
+    empty.textContent = appState.loading
+      ? 'Зареждане…'
+      : searchQuery
+        ? `Няма резултати за „${searchQuery}".`
+        : appState.activeTag
+          ? 'Няма спомени за избрания филтър.'
+          : 'Все още няма добавени спомени.';
     timelineList.appendChild(empty);
   }
 }
 
 function renderPeople() {
   peopleList.innerHTML = '';
-  const namesFromMemories = toSetList(appState.memories.map((m) => m.person));
+  const namesFromMemories = toSetList(appState.memories.flatMap((m) => m.persons));
   const namesFromPeople = toSetList(appState.people.map((p) => p.name));
   const allNames = toSetList([...namesFromPeople, ...namesFromMemories]);
 
@@ -936,8 +971,8 @@ function renderMemoryDetail() {
     detailStaticMapEl.classList.add('hidden');
   }
 
-  setMetaRow(detailPersonEl,   '👤', memory.person);
-  setMetaRow(detailItemEl,     '🎒', memory.item);
+  setMetaRow(detailPersonEl,   '👤', memory.persons.join(', '));
+  setMetaRow(detailItemEl,     '🎒', memory.items.join(', '));
 
   // 7. Tags as chips
   detailTags.innerHTML = '';
@@ -1016,14 +1051,18 @@ function initEditMap(existingPin) {
       editPickerMap.setView([existingPin.lat, existingPin.lng], 13);
     }
   } else {
-    editPinPickerEl.addEventListener('click', (e) => {
+    if (editFallbackClickHandler) {
+      editPinPickerEl.removeEventListener('click', editFallbackClickHandler);
+    }
+    editFallbackClickHandler = (e) => {
       const rect = editPinPickerEl.getBoundingClientRect();
       editDraftPin = {
         x: ((e.clientX - rect.left) / rect.width) * 100,
         y: ((e.clientY - rect.top) / rect.height) * 100,
       };
       renderEditPin();
-    });
+    };
+    editPinPickerEl.addEventListener('click', editFallbackClickHandler);
   }
 }
 
@@ -1034,8 +1073,8 @@ function enterEditMode() {
   editTextArea.value = memory.text;
   editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
   editLocation.value = memory.location || '';
-  editPerson.value = memory.person || '';
-  editItem.value = memory.item || '';
+  editPerson.value = memory.persons.join(', ');
+  editItem.value = memory.items.join(', ');
   editTags.value = (memory.tags?.general || []).join(', ');
   editActivityTags.value = (memory.tags?.activity || []).join(', ');
   editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
@@ -1131,7 +1170,7 @@ detailEditForm.addEventListener('submit', async (event) => {
   };
 
   // Update memory row in Supabase
-  await sb.from('memories').update({
+  const { error: updateError } = await sb.from('memories').update({
     text: newText,
     event_date: newEventDate,
     location: newLocation,
@@ -1140,28 +1179,60 @@ detailEditForm.addEventListener('submit', async (event) => {
     notes: newNotes,
     pin: editDraftPin,
     tags: newTags,
-  }).eq('id', memoryId);
+  }).eq('id', memoryId).eq('user_id', appState.userId);
+
+  if (updateError) {
+    console.error('Memory update error:', updateError);
+    alert(`Грешка при запазване: ${updateError.message}`);
+    return;
+  }
 
   // Remove deleted photos
   if (editRemovedPhotoIndices.size > 0) {
     const removedPaths = (memory.mediaPaths || []).filter((_, i) => editRemovedPhotoIndices.has(i));
     if (removedPaths.length) {
-      // Delete memory_media rows for removed paths
       for (const path of removedPaths) {
-        await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+        const { error: delRowErr } = await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+        if (delRowErr) console.error('memory_media delete error:', delRowErr);
       }
-      await sb.storage.from('memory-photos').remove(removedPaths);
+      const { error: delStorageErr } = await sb.storage.from('memory-photos').remove(removedPaths);
+      if (delStorageErr) console.error('Storage remove error:', delStorageErr);
     }
   }
 
-  // Upload new photos
+  // Upload new photos, collect successfully uploaded paths for the fallback
   const newFiles = [...editMediaInput.files].filter((f) => f.type.startsWith('image/'));
   const existingCount = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i)).length;
+  const uploadedPaths = [];
   for (let i = 0; i < newFiles.length; i++) {
-    await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
+    try {
+      const p = await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
+      uploadedPaths.push(p);
+    } catch (uploadErr) {
+      console.error('Photo upload error:', uploadErr);
+    }
   }
 
-  await loadData();
+  // Re-fetch only the edited memory so the rest of appState.memories is untouched
+  const { data: updatedRow, error: refetchErr } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  if (refetchErr) console.error('Memory re-fetch error:', refetchErr);
+  const idx = appState.memories.findIndex((m) => m.createdAt === memoryId);
+  if (idx !== -1) {
+    const keptPaths = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i));
+    appState.memories[idx] = mapMemory(updatedRow ?? {
+      id: memoryId,
+      text: newText,
+      event_date: newEventDate,
+      location: newLocation,
+      person: newPerson,
+      item: newItem,
+      notes: newNotes,
+      pin: editDraftPin,
+      tags: newTags,
+      memory_media: [...keptPaths, ...uploadedPaths].map((p, i) => ({ storage_path: p, position: i })),
+    });
+  }
+
   render();
   renderMemoryDetail();
   requestAnimationFrame(() => initDetailStaticMap());
@@ -1192,12 +1263,12 @@ async function importData(file) {
         return;
       }
 
-      // Deduplicate by text+eventDate
+      // Deduplicate by text+eventDate (never fall back to UUID/createdAt)
       const existingKeys = new Set(appState.memories.map((m) => `${m.text}|${m.eventDate}`));
       let importedMemories = 0;
 
       for (const m of incomingMemories) {
-        const key = `${m.text}|${m.eventDate || m.createdAt}`;
+        const key = `${m.text}|${m.eventDate || m.event_date || ''}`;
         if (existingKeys.has(key)) continue;
 
         const { data: inserted, error } = await sb.from('memories').insert({
@@ -1205,8 +1276,8 @@ async function importData(file) {
           text: m.text || '',
           event_date: m.eventDate || m.event_date || new Date().toISOString().slice(0, 10),
           location: m.location || '',
-          person: m.person || '',
-          item: m.item || '',
+          person: m.persons ? m.persons.join(', ') : (m.person || ''),
+          item: m.items ? m.items.join(', ') : (m.item || ''),
           notes: m.notes || '',
           pin: m.pin || null,
           tags: m.tags || null,
@@ -1224,6 +1295,7 @@ async function importData(file) {
               blob = dataUrlToBlob(url);
             } else {
               const resp = await fetch(url);
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               blob = await resp.blob();
             }
             await uploadMemPhotoBlob(blob, appState.userId, newMemId, i);
@@ -1251,6 +1323,7 @@ async function importData(file) {
               blob = dataUrlToBlob(p.photoDataUrl);
             } else {
               const resp = await fetch(p.photoDataUrl);
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               blob = await resp.blob();
             }
             photoPath = await uploadPeoplePhotoBlob(blob, appState.userId);
@@ -1259,21 +1332,25 @@ async function importData(file) {
           }
         }
 
-        await sb.from('people').insert({
+        const { error: peopleInsertErr } = await sb.from('people').insert({
           user_id: appState.userId,
           name: p.name,
           photo_url: photoPath || null,
         });
 
-        importedPeople++;
-        existingPeopleNames.add(p.name.toLowerCase());
+        if (!peopleInsertErr) {
+          importedPeople++;
+          existingPeopleNames.add(p.name.toLowerCase());
+        } else {
+          console.error('People import insert error:', peopleInsertErr);
+        }
       }
 
-      await loadData();
-      render();
+      await tryLoadData();
       alert(`Импортирани: ${importedMemories} спомена, ${importedPeople} хора.`);
-    } catch {
-      alert('Грешка при четене на файла. Уверете се, че е валиден JSON.');
+    } catch (err) {
+      console.error('Import error:', err);
+      alert(`Грешка при импорт: ${err?.message || 'Уверете се, че файлът е валиден JSON.'}`);
     }
   };
   reader.readAsText(file);
@@ -1332,8 +1409,14 @@ logoutBtn.addEventListener('click', async () => {
   appState.memories = [];
   appState.people = [];
   appState.activeTag = null;
+  appState.draftPin = null;
   appState.selectedPerson = null;
   appState.selectedMemory = null;
+  appState.loading = false;
+  searchQuery = '';
+  detailReturnTab = 'timeline';
+  if (timelineSearchInput) timelineSearchInput.value = '';
+  if (timelineSearchClear) timelineSearchClear.classList.add('hidden');
   setScreen();
   render();
   logoutBtn.disabled = false;
@@ -1404,6 +1487,8 @@ tabButtons.forEach((btn) =>
 peopleForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
+  if (!appState.userId) { alert('Не сте влезли в профила си.'); return; }
+
   const nameInput = document.querySelector('#people-name');
   const fileInput = document.querySelector('#people-photo');
   const name = nameInput.value.trim();
@@ -1414,33 +1499,37 @@ peopleForm.addEventListener('submit', async (event) => {
   let photoPath = existingPerson ? existingPerson.photoPath : '';
 
   if (fileInput.files[0]) {
-    // Upload new photo blob
-    const file = fileInput.files[0];
-    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
-    const newPath = await uploadPeoplePhotoBlob(blob, appState.userId);
-
-    // Delete old photo from storage if updating
-    if (existingPerson && existingPerson.photoPath) {
-      await sb.storage.from('people-photos').remove([existingPerson.photoPath]);
+    try {
+      const file = fileInput.files[0];
+      const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+      const newPath = await uploadPeoplePhotoBlob(blob, appState.userId);
+      // Delete old photo only after new upload succeeds
+      if (existingPerson && existingPerson.photoPath) {
+        await sb.storage.from('people-photos').remove([existingPerson.photoPath]);
+      }
+      photoPath = newPath;
+    } catch (uploadErr) {
+      console.error('People photo upload error:', uploadErr);
+      alert(`Грешка при качване на снимка: ${uploadErr.message}`);
+      return;
     }
-
-    photoPath = newPath;
   }
 
   if (existingPerson) {
-    await sb.from('people').update({
+    const { error } = await sb.from('people').update({
       photo_url: photoPath || null,
-    }).eq('id', existingPerson.id);
+    }).eq('id', existingPerson.id).eq('user_id', appState.userId);
+    if (error) { alert(`Грешка при запазване: ${error.message}`); return; }
   } else {
-    await sb.from('people').insert({
+    const { error } = await sb.from('people').insert({
       user_id: appState.userId,
       name,
       photo_url: photoPath || null,
     });
+    if (error) { alert(`Грешка при запазване: ${error.message}`); return; }
   }
 
-  await loadData();
-  render();
+  await tryLoadData();
   peopleForm.reset();
 });
 
@@ -1563,11 +1652,19 @@ setScreen(); // shows login by default
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 
 async function tryLoadData() {
+  if (dataLoadInProgress) return;
+  if (!appState.userId) return;
+  dataLoadInProgress = true;
+  appState.loading = true;
+  render();
   try {
     await loadData();
   } catch (e) {
     console.error('loadData error:', e);
     showDataError(e.message);
+  } finally {
+    dataLoadInProgress = false;
+    appState.loading = false;
   }
   render();
 }
@@ -1578,37 +1675,52 @@ function showDataError(msg) {
   const el = document.createElement('div');
   el.id = 'data-load-error';
   el.style.cssText = 'margin:12px 16px;padding:12px 14px;background:#fff0f0;border:1px solid #fca5a5;border-radius:14px;font-size:.85rem;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:10px';
-  el.innerHTML = `<span>Грешка при зареждане: ${msg}</span><button onclick="tryLoadData().then(()=>document.querySelector('#data-load-error')?.remove())" style="background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:99px;font-size:.8rem;font-weight:600;cursor:pointer;flex-shrink:0">Retry</button>`;
+  const span = document.createElement('span');
+  span.textContent = `Грешка при зареждане: ${msg}`;
+  const retryBtn = document.createElement('button');
+  retryBtn.textContent = 'Retry';
+  retryBtn.style.cssText = 'background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:99px;font-size:.8rem;font-weight:600;cursor:pointer;flex-shrink:0';
+  retryBtn.addEventListener('click', () => {
+    tryLoadData().then(() => document.querySelector('#data-load-error')?.remove());
+  });
+  el.append(span, retryBtn);
   const panel = document.querySelector('#create-memory');
   if (panel) panel.prepend(el);
 }
 
-sb.auth.getSession().then(async ({ data: { session } }) => {
-  if (session) {
-    appState.user = session.user.email;
-    appState.userId = session.user.id;
-    setScreen();
-    render();
-    await tryLoadData();
-  }
-});
-
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN') {
+  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+    if (!session) {
+      setScreen();
+      return;
+    }
     appState.user = session.user.email;
     appState.userId = session.user.id;
     setScreen();
-    render();
-    switchTab('create-memory');
+    if (event === 'SIGNED_IN') switchTab('create-memory');
     await tryLoadData();
+  } else if (event === 'TOKEN_REFRESHED') {
+    // The INITIAL_SESSION load may have silently returned [] because the
+    // previous JWT was expired and RLS filtered everything. Now that Supabase
+    // has refreshed the token, retry if we have no records.
+    if (session && appState.userId && appState.memories.length === 0 && !dataLoadInProgress) {
+      appState.userId = session.user.id;
+      await tryLoadData();
+    }
   } else if (event === 'SIGNED_OUT') {
     appState.user = null;
     appState.userId = null;
     appState.memories = [];
     appState.people = [];
     appState.activeTag = null;
+    appState.draftPin = null;
     appState.selectedPerson = null;
     appState.selectedMemory = null;
+    appState.loading = false;
+    searchQuery = '';
+    detailReturnTab = 'timeline';
+    if (timelineSearchInput) timelineSearchInput.value = '';
+    if (timelineSearchClear) timelineSearchClear.classList.add('hidden');
     setScreen();
     render();
   }
