@@ -1699,6 +1699,14 @@ sb.auth.onAuthStateChange(async (event, session) => {
     setScreen();
     if (event === 'SIGNED_IN') switchTab('create-memory');
     await tryLoadData();
+  } else if (event === 'TOKEN_REFRESHED') {
+    // The INITIAL_SESSION load may have silently returned [] because the
+    // previous JWT was expired and RLS filtered everything. Now that Supabase
+    // has refreshed the token, retry if we have no records.
+    if (session && appState.userId && appState.memories.length === 0 && !dataLoadInProgress) {
+      appState.userId = session.user.id;
+      await tryLoadData();
+    }
   } else if (event === 'SIGNED_OUT') {
     appState.user = null;
     appState.userId = null;
