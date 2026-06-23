@@ -167,11 +167,11 @@ function mapPerson(row) {
 }
 
 async function loadData() {
-  // Block until a valid token is guaranteed. getSession() auto-refreshes an
-  // expired JWT using the refresh token, so subsequent queries always carry a
-  // valid Authorization header regardless of how long the app was in the background.
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) return; // refresh token expired — SIGNED_OUT event will handle UI
+  // Guarantee a fresh access token before querying. getSession() blocks until
+  // any in-progress token refresh completes, so RLS never sees an expired JWT.
+  const { data: { session }, error: sessionErr } = await sb.auth.getSession();
+  if (sessionErr) throw new Error(sessionErr.message);
+  if (!session) return; // refresh token expired — SIGNED_OUT will handle the UI
 
   const [memoriesResult, peopleResult] = await Promise.all([
     sb.from('memories').select('*, memory_media(*)').eq('user_id', appState.userId),
@@ -1677,12 +1677,11 @@ async function tryLoadData() {
   } finally {
     dataLoadInProgress = false;
     appState.loading = false;
-    if (pendingTokenRefresh && appState.memories.length === 0) {
+    if (pendingTokenRefresh) {
       pendingTokenRefresh = false;
       await tryLoadData();
       return;
     }
-    pendingTokenRefresh = false;
   }
   render();
 }
@@ -1706,6 +1705,19 @@ function showDataError(msg) {
   if (panel) panel.prepend(el);
 }
 
+// Re-fetch data when the app comes back to the foreground after an extended
+// absence (token may have expired while the app was in the background).
+let lastHiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    lastHiddenAt = Date.now();
+    return;
+  }
+  if (appState.userId && !dataLoadInProgress && Date.now() - lastHiddenAt > 60_000) {
+    tryLoadData();
+  }
+});
+
 sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
     if (!session) {
@@ -1718,15 +1730,16 @@ sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN') switchTab('create-memory');
     await tryLoadData();
   } else if (event === 'TOKEN_REFRESHED') {
-    // The INITIAL_SESSION load may have silently returned [] because the
-    // previous JWT was expired and RLS filtered everything. Now that Supabase
-    // has refreshed the token, retry if we have no records.
+    // Token was refreshed — reload data unconditionally. This fires on:
+    // 1. Page reload when the previous access token was expired (and getSession()
+    //    inside loadData already waited for the refresh, so data was likely loaded,
+    //    but this is a safety net for timing edge cases).
+    // 2. App returning from background after the token expired — ensures data is
+    //    reloaded even without a page reload.
     if (session && appState.userId) {
       if (dataLoadInProgress) {
-        // tryLoadData is already running with a stale token — schedule a retry
-        // for when it finishes rather than dropping the refresh notification.
         pendingTokenRefresh = true;
-      } else if (appState.memories.length === 0) {
+      } else {
         appState.userId = session.user.id;
         await tryLoadData();
       }
