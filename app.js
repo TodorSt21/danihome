@@ -83,6 +83,7 @@ let editDraftPin = null;
 let editRemovedPhotoIndices = new Set();
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
+let pendingTokenRefresh = false;
 
 const exportBtn = document.querySelector('#export-btn');
 const importBtn = document.querySelector('#import-btn');
@@ -617,6 +618,7 @@ function renderMapPins() {
 
 function passesTagFilter(memory) {
   if (!appState.activeTag) return true;
+  if (appState.activeTag.type === 'item') return memory.items.includes(appState.activeTag.value);
   return memory.tags[appState.activeTag.type].includes(appState.activeTag.value);
 }
 
@@ -827,7 +829,11 @@ function renderPeople() {
 function renderTags() {
   tagsList.innerHTML = '';
   const seen = new Set();
-  appState.memories.flatMap(buildTagEntries).forEach((entry) => {
+  const allEntries = [
+    ...appState.memories.flatMap((m) => m.items.map((value) => ({ type: 'item', value, label: `🎒 ${value}` }))),
+    ...appState.memories.flatMap(buildTagEntries),
+  ];
+  allEntries.forEach((entry) => {
     const key = `${entry.type}:${entry.value}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -1665,6 +1671,12 @@ async function tryLoadData() {
   } finally {
     dataLoadInProgress = false;
     appState.loading = false;
+    if (pendingTokenRefresh && appState.memories.length === 0) {
+      pendingTokenRefresh = false;
+      await tryLoadData();
+      return;
+    }
+    pendingTokenRefresh = false;
   }
   render();
 }
@@ -1703,9 +1715,15 @@ sb.auth.onAuthStateChange(async (event, session) => {
     // The INITIAL_SESSION load may have silently returned [] because the
     // previous JWT was expired and RLS filtered everything. Now that Supabase
     // has refreshed the token, retry if we have no records.
-    if (session && appState.userId && appState.memories.length === 0 && !dataLoadInProgress) {
-      appState.userId = session.user.id;
-      await tryLoadData();
+    if (session && appState.userId) {
+      if (dataLoadInProgress) {
+        // tryLoadData is already running with a stale token — schedule a retry
+        // for when it finishes rather than dropping the refresh notification.
+        pendingTokenRefresh = true;
+      } else if (appState.memories.length === 0) {
+        appState.userId = session.user.id;
+        await tryLoadData();
+      }
     }
   } else if (event === 'SIGNED_OUT') {
     appState.user = null;
