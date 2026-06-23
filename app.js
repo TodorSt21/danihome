@@ -167,6 +167,12 @@ function mapPerson(row) {
 }
 
 async function loadData() {
+  // Block until a valid token is guaranteed. getSession() auto-refreshes an
+  // expired JWT using the refresh token, so subsequent queries always carry a
+  // valid Authorization header regardless of how long the app was in the background.
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return; // refresh token expired — SIGNED_OUT event will handle UI
+
   const [memoriesResult, peopleResult] = await Promise.all([
     sb.from('memories').select('*, memory_media(*)').eq('user_id', appState.userId),
     sb.from('people').select('*').eq('user_id', appState.userId),
