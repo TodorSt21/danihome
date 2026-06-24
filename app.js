@@ -1777,14 +1777,11 @@ sb.auth.onAuthStateChange(async (event, session) => {
     appState.userId = session.user.id;
     setScreen();
     if (event === 'SIGNED_IN') switchTab('create-memory');
-    // If the access token is already expired on page load, skip loading now.
-    // Supabase fires TOKEN_REFRESHED within milliseconds and that handler
-    // calls tryLoadData() with a guaranteed-fresh token. Loading here with
-    // the expired token would hit RLS (auth.uid() = null) and return empty.
-    const tokenExpired = session.expires_at && session.expires_at * 1000 < Date.now();
-    if (!tokenExpired) {
-      await tryLoadData();
-    }
+    // Always load data. autoRefreshToken:true means Supabase refreshes the
+    // token automatically before the first API call if it has expired, so
+    // skipping here on expiry is unnecessary and causes data to never load
+    // when TOKEN_REFRESHED fails to fire on PWA cold start.
+    await tryLoadData();
   } else if (event === 'TOKEN_REFRESHED') {
     // Always reload data after a token refresh — covers both page reload with
     // expired token (INITIAL_SESSION skipped loading) and foreground resume.
