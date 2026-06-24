@@ -175,9 +175,22 @@ function mapPerson(row) {
 async function loadData() {
   // Guarantee a fresh access token before querying. getSession() blocks until
   // any in-progress token refresh completes, so RLS never sees an expired JWT.
-  const { data: { session }, error: sessionErr } = await sb.auth.getSession();
+  let { data: { session }, error: sessionErr } = await sb.auth.getSession();
   if (sessionErr) throw new Error(sessionErr.message);
-  if (!session) return; // refresh token expired — SIGNED_OUT will handle the UI
+  if (!session) {
+    // getSession() returned nothing — try an explicit refresh before giving up.
+    // This covers the PWA cold-start case where the access token has expired
+    // but the refresh token is still valid.
+    const { data: refreshData, error: refreshError } = await sb.auth.refreshSession();
+    if (refreshError || !refreshData.session) {
+      await sb.auth.signOut();
+      return;
+    }
+    session = refreshData.session;
+    appState.user = session.user.email;
+    appState.userId = session.user.id;
+    setScreen();
+  }
 
   const [memoriesResult, peopleResult] = await Promise.all([
     sb.from('memories').select('*, memory_media(*)').eq('user_id', appState.userId),
