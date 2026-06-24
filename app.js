@@ -1710,22 +1710,10 @@ initMaps();
 switchTab('create-memory');
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 
-// Resolve auth state before the first render: dismiss splash, show the correct
-// screen immediately, and start loading data if a session exists.
-// onAuthStateChange (INITIAL_SESSION / TOKEN_REFRESHED) fires right after and
-// handles the expired-token refresh + data reload path.
-sb.auth.getSession().then(({ data: { session } }) => {
-  console.log('INIT: getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
-  console.log('INIT: userId:', session?.user?.id);
-  if (session) {
-    appState.user = session.user.email;
-    appState.userId = session.user.id;
-    setScreen();
-    tryLoadData();
-  } else {
-    setScreen();
-  }
-});
+// Auth state is handled entirely by onAuthStateChange below.
+// INITIAL_SESSION fires on every page load (including PWA cold start)
+// with the current session — no need to call getSession() separately.
+// This avoids the race condition where both run concurrently.
 
 async function tryLoadData() {
   console.log('tryLoadData called');
