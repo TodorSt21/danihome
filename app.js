@@ -100,10 +100,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const DEFAULT_MAP_CONFIG = {
-  center: [42.6977, 23.3219],
+  center: [42.6977, 23.3219], // [lat, lng]
   zoom: 6,
-  tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  tileAttribution: '&copy; OpenStreetMap contributors',
+  styleUrl: 'https://api.maptiler.com/maps/streets/style.json?key=EUCoLY6ma4XHK9Gt2Xxq',
 };
 
 const MAP_CONFIG = {
@@ -127,7 +126,7 @@ let mapMode = 'fallback';
 let pickerMap;
 let pickerMarker;
 let overviewMap;
-let overviewMarkersLayer;
+let overviewMarkers = [];
 
 // --- Supabase helpers ---
 
@@ -282,19 +281,19 @@ function setScreen() {
   appScreen.classList.toggle('active', loggedIn);
   if (loggedIn) welcomeText.textContent = `Здравей, ${appState.user.split('@')[0]}!`;
   if (loggedIn) {
-    refreshLeafletMapSizes();
+    refreshMapSizes();
   }
 }
 
-function refreshLeafletMapSizes(targetTab) {
-  if (mapMode !== 'leaflet') return;
+function refreshMapSizes(targetTab) {
+  if (mapMode !== 'maplibre') return;
 
   if ((!targetTab || targetTab === 'create-memory') && pickerMap) {
-    setTimeout(() => pickerMap.invalidateSize(), 0);
+    setTimeout(() => pickerMap.resize(), 0);
   }
 
   if ((!targetTab || targetTab === 'map') && overviewMap) {
-    setTimeout(() => overviewMap.invalidateSize(), 0);
+    setTimeout(() => overviewMap.resize(), 0);
   }
 }
 
@@ -304,7 +303,7 @@ function switchTab(targetTab) {
   if (targetTab === 'create-memory') {
     showHomeDashboard();
   }
-  refreshLeafletMapSizes(targetTab);
+  refreshMapSizes(targetTab);
 }
 
 function toSetList(values) {
@@ -378,8 +377,8 @@ function showHomeDashboard() {
 function showHomeAddForm() {
   homeDashboard.classList.add('hidden');
   homeAddForm.classList.remove('hidden');
-  if (mapMode === 'leaflet' && pickerMap) {
-    setTimeout(() => pickerMap.invalidateSize(), 50);
+  if (mapMode === 'maplibre' && pickerMap) {
+    setTimeout(() => pickerMap.resize(), 50);
   }
 }
 
@@ -519,42 +518,54 @@ function toFallbackPin(lat, lng) {
 }
 
 function initMaps() {
-  if (window.L) {
-    mapMode = 'leaflet';
-    pickerMap = L.map('memory-pin-picker').setView(MAP_CONFIG.center, MAP_CONFIG.zoom);
-    overviewMap = L.map('map-board').setView(MAP_CONFIG.center, MAP_CONFIG.zoom);
-    L.tileLayer(MAP_CONFIG.tileUrl, { attribution: MAP_CONFIG.tileAttribution, maxZoom: 19 }).addTo(pickerMap);
-    L.tileLayer(MAP_CONFIG.tileUrl, { attribution: MAP_CONFIG.tileAttribution, maxZoom: 19 }).addTo(overviewMap);
-    overviewMarkersLayer = L.layerGroup().addTo(overviewMap);
-
-    pickerMap.on('click', (event) => {
-      appState.draftPin = { lat: event.latlng.lat, lng: event.latlng.lng };
+  if (!window.maplibregl) {
+    memoryPinPickerEl.addEventListener('click', (event) => {
+      const rect = memoryPinPickerEl.getBoundingClientRect();
+      appState.draftPin = {
+        x: ((event.clientX - rect.left) / rect.width) * 100,
+        y: ((event.clientY - rect.top) / rect.height) * 100,
+      };
       renderDraftPin();
     });
     return;
   }
 
-  memoryPinPickerEl.addEventListener('click', (event) => {
-    const rect = memoryPinPickerEl.getBoundingClientRect();
-    appState.draftPin = {
-      x: ((event.clientX - rect.left) / rect.width) * 100,
-      y: ((event.clientY - rect.top) / rect.height) * 100,
-    };
+  mapMode = 'maplibre';
+  const mlCenter = [MAP_CONFIG.center[1], MAP_CONFIG.center[0]]; // MapLibre uses [lng, lat]
+
+  pickerMap = new maplibregl.Map({
+    container: 'memory-pin-picker',
+    style: MAP_CONFIG.styleUrl,
+    center: mlCenter,
+    zoom: MAP_CONFIG.zoom,
+  });
+
+  overviewMap = new maplibregl.Map({
+    container: 'map-board',
+    style: MAP_CONFIG.styleUrl,
+    center: mlCenter,
+    zoom: MAP_CONFIG.zoom,
+  });
+
+  pickerMap.on('click', (event) => {
+    appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
     renderDraftPin();
   });
 }
 
 function renderDraftPin() {
-  if (mapMode === 'leaflet') {
+  if (mapMode === 'maplibre') {
     if (pickerMarker) {
-      pickerMap.removeLayer(pickerMarker);
+      pickerMarker.remove();
       pickerMarker = null;
     }
     if (!appState.draftPin) {
       memoryPinCoords.textContent = 'Няма избран пин.';
       return;
     }
-    pickerMarker = L.marker([appState.draftPin.lat, appState.draftPin.lng]).addTo(pickerMap);
+    pickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
+      .setLngLat([appState.draftPin.lng, appState.draftPin.lat])
+      .addTo(pickerMap);
     memoryPinCoords.textContent = `Избран пин: ${appState.draftPin.lat.toFixed(5)}, ${appState.draftPin.lng.toFixed(5)}`;
     return;
   }
@@ -572,19 +583,30 @@ function renderMapPins() {
   mapPinsList.innerHTML = '';
   const withPins = appState.memories.filter((memory) => memory.pin);
 
-  if (mapMode === 'leaflet') {
-    overviewMarkersLayer.clearLayers();
+  if (mapMode === 'maplibre') {
+    overviewMarkers.forEach((m) => m.remove());
+    overviewMarkers = [];
     withPins.forEach((memory) => {
       if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
-        const marker = L.marker([memory.pin.lat, memory.pin.lng]);
-        marker.on('click', () => openMemoryDetail(memory.createdAt, 'map'));
-        overviewMarkersLayer.addLayer(marker);
+        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
+          .setLngLat([memory.pin.lng, memory.pin.lat])
+          .addTo(overviewMap);
+        marker.getElement().style.cursor = 'pointer';
+        marker.getElement().addEventListener('click', (e) => {
+          e.stopPropagation();
+          openMemoryDetail(memory.createdAt, 'map');
+        });
+        overviewMarkers.push(marker);
       }
     });
-    const leafletPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
-    if (leafletPins.length > 0) {
-      const bounds = L.latLngBounds(leafletPins.map((m) => [m.pin.lat, m.pin.lng]));
-      overviewMap.fitBounds(bounds.pad(0.5), { maxZoom: 11 });
+    const geoPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
+    if (geoPins.length > 0) {
+      const lngs = geoPins.map((m) => m.pin.lng);
+      const lats = geoPins.map((m) => m.pin.lat);
+      overviewMap.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 60, maxZoom: 11 },
+      );
     }
   } else {
     mapBoardEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
@@ -973,10 +995,10 @@ function renderMemoryDetail() {
   }
   setMetaRow(detailLocationEl, '📍', memory.location);
 
-  // Static pin map — actual Leaflet init is deferred until overlay is visible
+  // Static pin map — actual MapLibre init is deferred until overlay is visible
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
   const pin = memory.pin;
-  if (pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && mapMode === 'leaflet') {
+  if (pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && mapMode === 'maplibre') {
     detailStaticMapEl.classList.remove('hidden');
     detailStaticMapEl.innerHTML = '';
   } else {
@@ -1009,30 +1031,29 @@ function initDetailStaticMap() {
   if (!memory) return;
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
   const pin = memory.pin;
-  if (!pin || !Number.isFinite(pin.lat) || !Number.isFinite(pin.lng) || mapMode !== 'leaflet') return;
+  if (!pin || !Number.isFinite(pin.lat) || !Number.isFinite(pin.lng) || mapMode !== 'maplibre') return;
   detailStaticMapEl.innerHTML = '';
-  detailMapInstance = L.map(detailStaticMapEl, {
-    center: [pin.lat, pin.lng],
+  detailMapInstance = new maplibregl.Map({
+    container: detailStaticMapEl,
+    style: MAP_CONFIG.styleUrl,
+    center: [pin.lng, pin.lat],
     zoom: 13,
-    zoomControl: false,
-    dragging: false,
-    touchZoom: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    boxZoom: false,
-    keyboard: false,
+    interactive: false,
     attributionControl: false,
   });
-  L.tileLayer(MAP_CONFIG.tileUrl, { maxZoom: 19 }).addTo(detailMapInstance);
-  L.marker([pin.lat, pin.lng]).addTo(detailMapInstance);
-  setTimeout(() => detailMapInstance && detailMapInstance.invalidateSize(), 50);
+  new maplibregl.Marker({ color: '#2BB0A0' })
+    .setLngLat([pin.lng, pin.lat])
+    .addTo(detailMapInstance);
+  setTimeout(() => detailMapInstance && detailMapInstance.resize(), 50);
 }
 
 function renderEditPin() {
-  if (mapMode === 'leaflet') {
-    if (editPickerMarker) { editPickerMap.removeLayer(editPickerMarker); editPickerMarker = null; }
+  if (mapMode === 'maplibre') {
+    if (editPickerMarker) { editPickerMarker.remove(); editPickerMarker = null; }
     if (editDraftPin) {
-      editPickerMarker = L.marker([editDraftPin.lat, editDraftPin.lng]).addTo(editPickerMap);
+      editPickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
+        .setLngLat([editDraftPin.lng, editDraftPin.lat])
+        .addTo(editPickerMap);
       editPinCoords.textContent = `📍 ${editDraftPin.lat.toFixed(5)}, ${editDraftPin.lng.toFixed(5)}`;
     } else {
       editPinCoords.textContent = 'Няма избран пин.';
@@ -1049,19 +1070,25 @@ function renderEditPin() {
 }
 
 function initEditMap(existingPin) {
-  if (mapMode === 'leaflet') {
+  if (mapMode === 'maplibre') {
     if (!editPickerMap) {
-      editPickerMap = L.map('edit-pin-picker').setView(MAP_CONFIG.center, MAP_CONFIG.zoom);
-      L.tileLayer(MAP_CONFIG.tileUrl, { attribution: MAP_CONFIG.tileAttribution, maxZoom: 19 }).addTo(editPickerMap);
+      editPickerMap = new maplibregl.Map({
+        container: 'edit-pin-picker',
+        style: MAP_CONFIG.styleUrl,
+        center: [MAP_CONFIG.center[1], MAP_CONFIG.center[0]],
+        zoom: MAP_CONFIG.zoom,
+      });
       editPickerMap.on('click', (e) => {
-        editDraftPin = { lat: e.latlng.lat, lng: e.latlng.lng };
+        editDraftPin = { lat: e.lngLat.lat, lng: e.lngLat.lng };
         renderEditPin();
       });
     }
-    setTimeout(() => editPickerMap.invalidateSize(), 80);
+    setTimeout(() => editPickerMap.resize(), 80);
     if (existingPin?.lat) {
-      editPickerMap.setView([existingPin.lat, existingPin.lng], 13);
+      editPickerMap.setCenter([existingPin.lng, existingPin.lat]);
+      editPickerMap.setZoom(13);
     }
+    return;
   } else {
     if (editFallbackClickHandler) {
       editPinPickerEl.removeEventListener('click', editFallbackClickHandler);
