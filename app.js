@@ -173,6 +173,7 @@ function mapPerson(row) {
 }
 
 async function loadData() {
+  console.log('loadData called, userId:', appState.userId);
   // Guarantee a fresh access token before querying. getSession() blocks until
   // any in-progress token refresh completes, so RLS never sees an expired JWT.
   let { data: { session }, error: sessionErr } = await sb.auth.getSession();
@@ -1714,6 +1715,8 @@ document.querySelector('#memory-event-date').value = new Date().toISOString().sl
 // onAuthStateChange (INITIAL_SESSION / TOKEN_REFRESHED) fires right after and
 // handles the expired-token refresh + data reload path.
 sb.auth.getSession().then(({ data: { session } }) => {
+  console.log('INIT: getSession result:', session ? 'HAS SESSION' : 'NO SESSION');
+  console.log('INIT: userId:', session?.user?.id);
   if (session) {
     appState.user = session.user.email;
     appState.userId = session.user.id;
@@ -1725,6 +1728,7 @@ sb.auth.getSession().then(({ data: { session } }) => {
 });
 
 async function tryLoadData() {
+  console.log('tryLoadData called');
   if (dataLoadInProgress) return;
   if (!appState.userId) return;
   dataLoadInProgress = true;
