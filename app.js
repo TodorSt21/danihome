@@ -97,7 +97,14 @@ const clearPinBtn = document.querySelector('#clear-pin');
 // --- Supabase ---
 const SUPABASE_URL = 'https://vcmypvmwtccejwuaiiod.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjbXlwdm13dGNjZWp3dWFpaW9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTQzODgsImV4cCI6MjA4OTc3MDM4OH0.smL2oX-kbE5X0Ojfu-gwGBL_XO8khGedxIMh_1PAbvQ';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    storage: localStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219], // [lat, lng]
@@ -276,6 +283,7 @@ function normalizeTagGroups(tags) {
 }
 
 function setScreen() {
+  document.getElementById('auth-splash')?.remove();
   const loggedIn = Boolean(appState.user);
   loginScreen.classList.toggle('active', !loggedIn);
   appScreen.classList.toggle('active', loggedIn);
@@ -1689,15 +1697,19 @@ initMaps();
 switchTab('create-memory');
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
 
-// Check for an existing session before the first render so we never flash
-// the login screen when the user is already authenticated. onAuthStateChange
-// (INITIAL_SESSION) fires immediately after and handles data loading.
+// Resolve auth state before the first render: dismiss splash, show the correct
+// screen immediately, and start loading data if a session exists.
+// onAuthStateChange (INITIAL_SESSION / TOKEN_REFRESHED) fires right after and
+// handles the expired-token refresh + data reload path.
 sb.auth.getSession().then(({ data: { session } }) => {
   if (session) {
     appState.user = session.user.email;
     appState.userId = session.user.id;
+    setScreen();
+    tryLoadData();
+  } else {
+    setScreen();
   }
-  setScreen();
 });
 
 async function tryLoadData() {
