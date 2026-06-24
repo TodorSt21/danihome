@@ -10,6 +10,7 @@ body {
   font-family: 'DM Sans', system-ui, sans-serif;
   background: var(--background);
   color: var(--text-primary);
+  overscroll-behavior-y: contain;
 }
 
 .app-shell {

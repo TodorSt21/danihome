@@ -1,4 +1,4 @@
-const CACHE = 'pamet-v19';
+const CACHE = 'pamet-v20';
 const PRECACHE = [
   'index.html',
   'app.js',
@@ -26,6 +26,27 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  // Never intercept Supabase API or auth — must always reach the network.
+  if (event.request.url.includes('supabase.co')) return;
+
+  // Navigation requests (pull-to-refresh, direct URL entry) use network-first
+  // so the user always gets a fresh page when online, with cache as offline fallback.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match('index.html'))
+    );
+    return;
+  }
+
+  // All other GET requests (assets, CDN): cache-first, fill cache on miss.
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
@@ -37,11 +58,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          if (event.request.mode === 'navigate') {
-            return caches.match('index.html');
-          }
-        });
+        .catch(() => null);
     })
   );
 });
