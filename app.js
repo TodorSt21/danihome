@@ -178,9 +178,9 @@ async function loadData() {
   let { data: { session }, error: sessionErr } = await sb.auth.getSession();
   if (sessionErr) throw new Error(sessionErr.message);
   if (!session) {
-    // getSession() returned nothing — try an explicit refresh before giving up.
-    // This covers the PWA cold-start case where the access token has expired
-    // but the refresh token is still valid.
+    // Access token expired — try to refresh explicitly before giving up.
+    // This fixes the PWA bug where reopening the app after being closed
+    // returns null session even though the refresh token is still valid.
     const { data: refreshData, error: refreshError } = await sb.auth.refreshSession();
     if (refreshError || !refreshData.session) {
       await sb.auth.signOut();
@@ -189,7 +189,6 @@ async function loadData() {
     session = refreshData.session;
     appState.user = session.user.email;
     appState.userId = session.user.id;
-    setScreen();
   }
 
   const [memoriesResult, peopleResult] = await Promise.all([
