@@ -324,7 +324,15 @@ function switchTab(targetTab) {
   if (targetTab === 'create-memory') {
     showHomeDashboard();
   }
-  refreshMapSizes(targetTab);
+  if (targetTab === 'map' && mapMode === 'maplibre' && !overviewMap) {
+    setTimeout(() => {
+      initOverviewMap();
+      refreshMapSizes('map');
+      renderMapPins();
+    }, 500);
+  } else {
+    refreshMapSizes(targetTab);
+  }
 }
 
 function toSetList(values) {
@@ -398,8 +406,12 @@ function showHomeDashboard() {
 function showHomeAddForm() {
   homeDashboard.classList.add('hidden');
   homeAddForm.classList.remove('hidden');
-  if (mapMode === 'maplibre' && pickerMap) {
-    setTimeout(() => pickerMap.resize(), 50);
+  if (mapMode === 'maplibre') {
+    if (!pickerMap) {
+      setTimeout(() => { initPickerMap(); if (pickerMap) pickerMap.resize(); }, 500);
+    } else {
+      setTimeout(() => pickerMap.resize(), 50);
+    }
   }
 }
 
@@ -550,27 +562,33 @@ function initMaps() {
     });
     return;
   }
-
   mapMode = 'maplibre';
-  const mlCenter = [MAP_CONFIG.center[1], MAP_CONFIG.center[0]]; // MapLibre uses [lng, lat]
+  // Maps are initialized lazily when their containers first become visible
+}
 
+function initPickerMap() {
+  if (!window.maplibregl || pickerMap) return;
+  const mlCenter = [MAP_CONFIG.center[1], MAP_CONFIG.center[0]];
   pickerMap = new maplibregl.Map({
     container: 'memory-pin-picker',
     style: MAP_CONFIG.styleUrl,
     center: mlCenter,
     zoom: MAP_CONFIG.zoom,
   });
+  pickerMap.on('click', (event) => {
+    appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
+    renderDraftPin();
+  });
+}
 
+function initOverviewMap() {
+  if (!window.maplibregl || overviewMap) return;
+  const mlCenter = [MAP_CONFIG.center[1], MAP_CONFIG.center[0]];
   overviewMap = new maplibregl.Map({
     container: 'map-board',
     style: MAP_CONFIG.styleUrl,
     center: mlCenter,
     zoom: MAP_CONFIG.zoom,
-  });
-
-  pickerMap.on('click', (event) => {
-    appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
-    renderDraftPin();
   });
 }
 
@@ -607,27 +625,29 @@ function renderMapPins() {
   if (mapMode === 'maplibre') {
     overviewMarkers.forEach((m) => m.remove());
     overviewMarkers = [];
-    withPins.forEach((memory) => {
-      if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
-        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
-          .setLngLat([memory.pin.lng, memory.pin.lat])
-          .addTo(overviewMap);
-        marker.getElement().style.cursor = 'pointer';
-        marker.getElement().addEventListener('click', (e) => {
-          e.stopPropagation();
-          openMemoryDetail(memory.createdAt, 'map');
-        });
-        overviewMarkers.push(marker);
+    if (overviewMap) {
+      withPins.forEach((memory) => {
+        if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
+          const marker = new maplibregl.Marker({ color: '#2BB0A0' })
+            .setLngLat([memory.pin.lng, memory.pin.lat])
+            .addTo(overviewMap);
+          marker.getElement().style.cursor = 'pointer';
+          marker.getElement().addEventListener('click', (e) => {
+            e.stopPropagation();
+            openMemoryDetail(memory.createdAt, 'map');
+          });
+          overviewMarkers.push(marker);
+        }
+      });
+      const geoPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
+      if (geoPins.length > 0) {
+        const lngs = geoPins.map((m) => m.pin.lng);
+        const lats = geoPins.map((m) => m.pin.lat);
+        overviewMap.fitBounds(
+          [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+          { padding: 60, maxZoom: 11 },
+        );
       }
-    });
-    const geoPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
-    if (geoPins.length > 0) {
-      const lngs = geoPins.map((m) => m.pin.lng);
-      const lats = geoPins.map((m) => m.pin.lat);
-      overviewMap.fitBounds(
-        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-        { padding: 60, maxZoom: 11 },
-      );
     }
   } else {
     mapBoardEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
