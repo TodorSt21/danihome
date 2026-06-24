@@ -1687,8 +1687,18 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLight
 
 initMaps();
 switchTab('create-memory');
-setScreen(); // shows login by default
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
+
+// Check for an existing session before the first render so we never flash
+// the login screen when the user is already authenticated. onAuthStateChange
+// (INITIAL_SESSION) fires immediately after and handles data loading.
+sb.auth.getSession().then(({ data: { session } }) => {
+  if (session) {
+    appState.user = session.user.email;
+    appState.userId = session.user.id;
+  }
+  setScreen();
+});
 
 async function tryLoadData() {
   if (dataLoadInProgress) return;
