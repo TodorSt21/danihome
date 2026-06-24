@@ -4,8 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Памет | Спомени</title>
-    <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#2BB0A0" />
+<meta name="theme-color" content="#2BB0A0" />
     <style>
       html, body {
         overscroll-behavior-y: contain;
@@ -423,16 +422,5 @@
 
     <script src="https://unpkg.com/maplibre-gl@3/dist/maplibre-gl.js"></script>
     <script src="app.js"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-        let reloading = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (reloading) return;
-          reloading = true;
-          window.location.reload();
-        });
-      }
-    </script>
   </body>
 </html>
