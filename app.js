@@ -174,24 +174,14 @@ function mapPerson(row) {
 
 async function loadData() {
   console.log('loadData called, userId:', appState.userId);
-  // Guarantee a fresh access token before querying. getSession() blocks until
-  // any in-progress token refresh completes, so RLS never sees an expired JWT.
-  let { data: { session }, error: sessionErr } = await sb.auth.getSession();
-  if (sessionErr) throw new Error(sessionErr.message);
-  if (!session) {
-    // Access token expired — try to refresh explicitly before giving up.
-    // This fixes the PWA bug where reopening the app after being closed
-    // returns null session even though the refresh token is still valid.
-    const { data: refreshData, error: refreshError } = await sb.auth.refreshSession();
-    if (refreshError || !refreshData.session) {
-      await sb.auth.signOut();
-      return;
-    }
-    session = refreshData.session;
-    appState.user = session.user.email;
-    appState.userId = session.user.id;
+  if (!appState.userId) {
+    console.warn('loadData: no userId, aborting');
+    return;
   }
 
+  // Query directly. autoRefreshToken:true keeps the access token fresh, so we
+  // do NOT call getSession() here — calling it can block on the auth lock and
+  // leave the query pending forever (the deadlock that caused 0 records on refresh).
   const [memoriesResult, peopleResult] = await Promise.all([
     sb.from('memories').select('*, memory_media(*)').eq('user_id', appState.userId),
     sb.from('people').select('*').eq('user_id', appState.userId),
@@ -1793,7 +1783,11 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-sb.auth.onAuthStateChange(async (event, session) => {
+sb.auth.onAuthStateChange((event, session) => {
+  // CRITICAL: Never await Supabase queries inside this callback. The auth
+  // library holds an internal lock during the callback; awaiting a query
+  // here deadlocks it (query stays pending forever). We defer all data
+  // loading with setTimeout(0) so the callback returns and releases the lock.
   if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
     if (!session) {
       setScreen();
@@ -1803,29 +1797,15 @@ sb.auth.onAuthStateChange(async (event, session) => {
     appState.userId = session.user.id;
     setScreen();
     if (event === 'SIGNED_IN') switchTab('create-memory');
-    // Always load data. autoRefreshToken:true means Supabase refreshes the
-    // token automatically before the first API call if it has expired, so
-    // skipping here on expiry is unnecessary and causes data to never load
-    // when TOKEN_REFRESHED fails to fire on PWA cold start.
-    await tryLoadData();
-    if (event === 'INITIAL_SESSION' && appState.memories.length === 0 && appState.userId) {
-      console.log('INITIAL_SESSION: 0 memories after first load, scheduling retry in 3s');
-      setTimeout(async () => {
-        if (appState.memories.length === 0 && appState.userId && !dataLoadInProgress) {
-          console.log('INITIAL_SESSION: retrying loadData...');
-          await tryLoadData();
-        }
-      }, 3000);
-    }
+    setTimeout(() => { tryLoadData(); }, 0);
   } else if (event === 'TOKEN_REFRESHED') {
-    // Always reload data after a token refresh — covers both page reload with
-    // expired token (INITIAL_SESSION skipped loading) and foreground resume.
+    // Deferred out of the callback (setTimeout) to avoid the auth-lock deadlock.
     if (session && appState.userId) {
       if (dataLoadInProgress) {
         pendingTokenRefresh = true;
       } else {
         appState.userId = session.user.id;
-        await tryLoadData();
+        setTimeout(() => { tryLoadData(); }, 0);
       }
     }
   } else if (event === 'SIGNED_OUT') {
