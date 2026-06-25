@@ -423,5 +423,14 @@
 
     <script src="https://unpkg.com/maplibre-gl@3/dist/maplibre-gl.js"></script>
     <script src="app.js"></script>
+    <script>
+      // Unregister any previously installed service worker so stale caches
+      // no longer intercept app.js or index.html.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((r) => r.unregister());
+        });
+      }
+    </script>
   </body>
 </html>

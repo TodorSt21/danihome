@@ -211,6 +211,7 @@ async function loadData() {
   if (peopleResult.data) {
     appState.people = peopleResult.data.map(mapPerson);
   }
+  console.log(`loadData complete: ${appState.memories.length} memories, ${appState.people.length} people`);
 }
 
 async function deleteMemoryById(id) {
@@ -1729,6 +1730,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLight
 initMaps();
 switchTab('create-memory');
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
+console.log('App version: 2026-06-25-fix');
 
 // Auth state is handled entirely by onAuthStateChange below.
 // INITIAL_SESSION fires on every page load (including PWA cold start)
@@ -1806,6 +1808,15 @@ sb.auth.onAuthStateChange(async (event, session) => {
     // skipping here on expiry is unnecessary and causes data to never load
     // when TOKEN_REFRESHED fails to fire on PWA cold start.
     await tryLoadData();
+    if (event === 'INITIAL_SESSION' && appState.memories.length === 0 && appState.userId) {
+      console.log('INITIAL_SESSION: 0 memories after first load, scheduling retry in 3s');
+      setTimeout(async () => {
+        if (appState.memories.length === 0 && appState.userId && !dataLoadInProgress) {
+          console.log('INITIAL_SESSION: retrying loadData...');
+          await tryLoadData();
+        }
+      }, 3000);
+    }
   } else if (event === 'TOKEN_REFRESHED') {
     // Always reload data after a token refresh — covers both page reload with
     // expired token (INITIAL_SESSION skipped loading) and foreground resume.
