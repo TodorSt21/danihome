@@ -1,0 +1,20 @@
+{
+  "name": "ПАМЕТ",
+  "short_name": "ПАМЕТ",
+  "description": "Твоите лични спомени",
+  "start_url": "/pamet/",
+  "scope": "/pamet/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#2BB0A0",
+  "background_color": "#FBF8F3",
+  "lang": "bg",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

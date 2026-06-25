@@ -1030,3 +1030,18 @@ button.tiny {
     transform: translateY(0);
   }
 }
+
+@media (min-width: 768px) {
+  body {
+    display: flex;
+    justify-content: center;
+    background: #f0ede8;
+  }
+  #app-screen {
+    max-width: 430px;
+    width: 100%;
+    min-height: 100vh;
+    box-shadow: 0 0 40px rgba(0,0,0,0.15);
+    position: relative;
+  }
+}

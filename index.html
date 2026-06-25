@@ -4,12 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Памет | Спомени</title>
-<meta name="theme-color" content="#2BB0A0" />
+    <link rel="manifest" href="/pamet/manifest.json">
+    <meta name="theme-color" content="#2BB0A0">
     <style>
-      html, body {
-        overscroll-behavior-y: contain;
-        overscroll-behavior: none;
-      }
+      html, body { overscroll-behavior: none; }
     </style>
     <link rel="apple-touch-icon" href="icons/icon.svg" />
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3/dist/maplibre-gl.css" />
@@ -424,12 +422,8 @@
     <script src="https://unpkg.com/maplibre-gl@3/dist/maplibre-gl.js"></script>
     <script src="app.js"></script>
     <script>
-      // Unregister any previously installed service worker so stale caches
-      // no longer intercept app.js or index.html.
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) => {
-          regs.forEach((r) => r.unregister());
-        });
+        navigator.serviceWorker.register('/pamet/sw.js');
       }
     </script>
   </body>
