@@ -69,6 +69,7 @@ const editTags = document.querySelector('#edit-tags');
 const editActivityTags = document.querySelector('#edit-activity-tags');
 const editEmotionTags = document.querySelector('#edit-emotion-tags');
 const editNotesArea = document.querySelector('#edit-notes');
+const editTitleInput = document.querySelector('#edit-title');
 const editExistingPhotos = document.querySelector('#edit-existing-photos');
 const editMediaInput = document.querySelector('#edit-media');
 const editMediaPreview = document.querySelector('#edit-media-preview');
@@ -134,6 +135,7 @@ let pickerMap;
 let pickerMarker;
 let overviewMap;
 let overviewMarkers = [];
+let pickerSavedMarkers = [];
 
 // --- Supabase helpers ---
 
@@ -149,6 +151,7 @@ function mapMemory(row) {
   const media = (row.memory_media || []).slice().sort((a, b) => a.position - b.position);
   return {
     createdAt: row.id,
+    title: row.title || '',
     text: row.text || '',
     eventDate: row.event_date || row.created_at,
     location: row.location || '',
@@ -265,6 +268,17 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
+function escHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const ICON = {
+  pin: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>`,
+  bag: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+  heart: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`,
+  target: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+};
+
 // --- Core functions ---
 
 function normalizePin(pin) {
@@ -341,8 +355,8 @@ function parsePeople(raw) {
 function buildTagEntries(memory) {
   return [
     ...memory.tags.general.map((value) => ({ type: 'general', value, label: `#${value}` })),
-    ...memory.tags.activity.map((value) => ({ type: 'activity', value, label: `🎯 ${value}` })),
-    ...memory.tags.emotion.map((value) => ({ type: 'emotion', value, label: `💛 ${value}` })),
+    ...memory.tags.activity.map((value) => ({ type: 'activity', value, label: `🎯 ${value}`, iconHtml: ICON.target })),
+    ...memory.tags.emotion.map((value) => ({ type: 'emotion', value, label: `💛 ${value}`, iconHtml: ICON.heart })),
   ];
 }
 
@@ -350,7 +364,14 @@ function buildTagButton(entry) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'tag-chip';
-  button.textContent = entry.label;
+  if (entry.iconHtml) {
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'chip-icon';
+    iconSpan.innerHTML = entry.iconHtml;
+    button.append(iconSpan, document.createTextNode(' ' + entry.value));
+  } else {
+    button.textContent = entry.label;
+  }
   button.addEventListener('click', () => {
     appState.activeTag = entry;
     switchTab('timeline');
@@ -418,17 +439,19 @@ function renderHomeSummary() {
 
   const SVG = (d) => `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
   const stats = [
-    { label: 'Спомени', value: appState.memories.length, icon: SVG('<rect x="2" y="7" width="20" height="15" rx="2.5"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="14" r="3"/>') },
-    { label: 'Хора',    value: uniquePeople.size,         icon: SVG('<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5"/><circle cx="18" cy="8" r="2.5"/><path d="M22 20c0-2.5-2-4-4-4"/>') },
-    { label: 'Места',   value: uniquePlaces.size,         icon: SVG('<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/>') },
-    { label: 'Снимки',  value: photosCount,               icon: SVG('<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>') },
+    { label: 'Спомени', value: appState.memories.length, icon: SVG('<rect x="2" y="7" width="20" height="15" rx="2.5"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="12" cy="14" r="3"/>'), onClick: () => switchTab('timeline') },
+    { label: 'Хора',    value: uniquePeople.size,         icon: SVG('<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5"/><circle cx="18" cy="8" r="2.5"/><path d="M22 20c0-2.5-2-4-4-4"/>'), onClick: () => switchTab('people') },
+    { label: 'Места',   value: uniquePlaces.size,         icon: SVG('<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/>'), onClick: () => switchTab('map') },
+    { label: 'Снимки',  value: photosCount,               icon: SVG('<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>'), onClick: () => openPhotosOverlay() },
   ];
 
   statsGrid.innerHTML = '';
   stats.forEach((stat) => {
     const card = document.createElement('article');
     card.className = 'stat-card';
+    card.style.cursor = 'pointer';
     card.innerHTML = `<span class="stat-icon">${stat.icon}</span><strong>${stat.value}</strong><small>${stat.label}</small>`;
+    card.addEventListener('click', stat.onClick);
     statsGrid.appendChild(card);
   });
 
@@ -439,10 +462,10 @@ function renderHomeSummary() {
       const clone = memoryTemplate.content.cloneNode(true);
       clone.querySelector('.memory-photo').src = getMemoryCover(memory);
       clone.querySelector('.event-date').textContent = formatEventDate(memory.eventDate);
-      clone.querySelector('.text').textContent = memory.text;
+      clone.querySelector('.text').textContent = memory.title || memory.text;
 
       const locationEl = clone.querySelector('.location');
-      if (memory.location) locationEl.textContent = `📍 ${memory.location}`;
+      if (memory.location) locationEl.innerHTML = `${ICON.pin} ${escHtml(memory.location)}`;
       else locationEl.remove();
 
       clone.querySelector('.person')?.remove();
@@ -501,9 +524,9 @@ function renderOnThisDay() {
     yearSpan.className = 'on-this-day-year';
     yearSpan.textContent = String(year);
     const strong = document.createElement('strong');
-    strong.textContent = memory.text.slice(0, 60);
+    strong.textContent = (memory.title || memory.text).slice(0, 60);
     const small = document.createElement('small');
-    if (memory.location) small.textContent = `📍 ${memory.location}`;
+    if (memory.location) small.innerHTML = `${ICON.pin} ${escHtml(memory.location)}`;
     body.append(yearSpan, strong, small);
     li.append(img, body);
     li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
@@ -570,6 +593,7 @@ function initPickerMap() {
     appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
     renderDraftPin();
   });
+  pickerMap.on('load', () => renderPickerSavedPins());
 }
 
 function initOverviewMap() {
@@ -659,11 +683,11 @@ function renderMapPins() {
   }
 
   withPins.forEach((memory, index) => {
-    const title = memory.location || memory.text.slice(0, 48);
+    const pinTitle = memory.location || (memory.title || memory.text).slice(0, 48);
     const li = document.createElement('li');
     li.className = 'memory-item';
     li.style.cursor = 'pointer';
-    li.textContent = `📍 Пин #${index + 1} — ${title}`;
+    li.innerHTML = `${ICON.pin} Пин #${index + 1} — ${escHtml(pinTitle)}`;
     li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
     mapPinsList.appendChild(li);
   });
@@ -745,7 +769,9 @@ function renderPersonDetail() {
     const textP = document.createElement('p');
     textP.textContent = memory.text;
     const locationSmall = document.createElement('small');
-    locationSmall.textContent = memory.location ? `📍 ${memory.location}` : '📍 Без локация';
+    locationSmall.innerHTML = memory.location
+      ? `${ICON.pin} ${escHtml(memory.location)}`
+      : `${ICON.pin} Без локация`;
     li.append(dateStrong, textP, locationSmall);
     personDetailMemories.appendChild(li);
   });
@@ -779,10 +805,10 @@ function renderTimeline() {
     const clone = memoryTemplate.content.cloneNode(true);
     clone.querySelector('.memory-photo').src = getMemoryCover(memory);
     clone.querySelector('.event-date').textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
-    clone.querySelector('.text').textContent = memory.text;
+    clone.querySelector('.text').textContent = memory.title || memory.text;
 
     const locationEl = clone.querySelector('.location');
-    if (memory.location) locationEl.textContent = `📍 ${memory.location}`;
+    if (memory.location) locationEl.innerHTML = `${ICON.pin} ${escHtml(memory.location)}`;
     else locationEl.remove();
 
     const personEl = clone.querySelector('.person');
@@ -790,7 +816,7 @@ function renderTimeline() {
     else personEl?.remove();
 
     const itemEl = clone.querySelector('.item');
-    if (memory.items.length) itemEl.textContent = `🎒 ${memory.items.join(', ')}`;
+    if (memory.items.length) itemEl.innerHTML = `${ICON.bag} ${escHtml(memory.items.join(', '))}`;
     else itemEl?.remove();
 
     const mediaEl = clone.querySelector('.media-count');
@@ -868,6 +894,23 @@ function renderPeople() {
     memoryCount.textContent = `${getMemoriesForPerson(name).length} спомена`;
 
     li.append(img, caption, memoryCount);
+
+    const inDb = appState.people.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (inDb) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-delete-person';
+      delBtn.textContent = '✕';
+      delBtn.setAttribute('aria-label', `Изтрий ${name}`);
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Изтрий „${name}" от списъка с хора?`)) return;
+        delBtn.disabled = true;
+        await deletePersonByName(name);
+        renderPeople();
+      });
+      li.appendChild(delBtn);
+    }
     li.addEventListener('click', () => openPersonDetail(name));
     li.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -890,7 +933,7 @@ function renderTags() {
   tagsList.innerHTML = '';
   const seen = new Set();
   const allEntries = [
-    ...appState.memories.flatMap((m) => m.items.map((value) => ({ type: 'item', value, label: `🎒 ${value}` }))),
+    ...appState.memories.flatMap((m) => m.items.map((value) => ({ type: 'item', value, label: `🎒 ${value}`, iconHtml: ICON.bag }))),
     ...appState.memories.flatMap(buildTagEntries),
   ];
   allEntries.forEach((entry) => {
@@ -932,6 +975,7 @@ function render() {
   renderTags();
   renderDraftPin();
   renderMapPins();
+  renderPickerSavedPins();
 }
 
 function openMemoryDetail(createdAt, returnTab = 'timeline') {
@@ -1010,22 +1054,22 @@ function renderMemoryDetail() {
     detailGallery.appendChild(placeholder);
   }
 
-  // 2. Title (memory text, large bold)
-  detailTitle.textContent = memory.text;
+  // 2. Title (memory title, large bold; fall back to text for old memories)
+  detailTitle.textContent = memory.title || memory.text;
 
   // 3. Date
   detailDate.textContent = `🗓️ ${formatEventDate(memory.eventDate)}`;
 
   // 4–6. Location / Person / Item — show only if filled
-  function setMetaRow(el, icon, value) {
+  function setMetaRow(el, iconHtml, value) {
     if (value) {
-      el.textContent = `${icon} ${value}`;
+      el.innerHTML = `${iconHtml} ${escHtml(value)}`;
       el.classList.remove('hidden');
     } else {
       el.classList.add('hidden');
     }
   }
-  setMetaRow(detailLocationEl, '📍', memory.location);
+  setMetaRow(detailLocationEl, ICON.pin, memory.location);
 
   // Static pin map — actual MapLibre init is deferred until overlay is visible
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
@@ -1037,8 +1081,8 @@ function renderMemoryDetail() {
     detailStaticMapEl.classList.add('hidden');
   }
 
-  setMetaRow(detailPersonEl,   '👤', memory.persons.join(', '));
-  setMetaRow(detailItemEl,     '🎒', memory.items.join(', '));
+  setMetaRow(detailPersonEl, '👤', memory.persons.join(', '));
+  setMetaRow(detailItemEl,   ICON.bag, memory.items.join(', '));
 
   // 7. Tags as chips
   detailTags.innerHTML = '';
@@ -1051,7 +1095,12 @@ function renderMemoryDetail() {
   } else {
     detailNotesWrap.classList.add('hidden');
   }
-  detailText.classList.add('hidden');
+  if (memory.title && memory.text) {
+    detailText.textContent = memory.text;
+    detailText.classList.remove('hidden');
+  } else {
+    detailText.classList.add('hidden');
+  }
 
   // Reset to view mode
   detailView.classList.remove('hidden');
@@ -1086,7 +1135,7 @@ function renderEditPin() {
       editPickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
         .setLngLat([editDraftPin.lng, editDraftPin.lat])
         .addTo(editPickerMap);
-      editPinCoords.textContent = `📍 ${editDraftPin.lat.toFixed(5)}, ${editDraftPin.lng.toFixed(5)}`;
+      editPinCoords.innerHTML = `${ICON.pin} ${editDraftPin.lat.toFixed(5)}, ${editDraftPin.lng.toFixed(5)}`;
     } else {
       editPinCoords.textContent = 'Няма избран пин.';
     }
@@ -1094,7 +1143,7 @@ function renderEditPin() {
     editPinPickerEl.querySelectorAll('.fallback-pin').forEach((p) => p.remove());
     if (editDraftPin) {
       addFallbackPin(editPinPickerEl, editDraftPin.x ?? 50, editDraftPin.y ?? 50, 'Пин');
-      editPinCoords.textContent = `📍 x ${(editDraftPin.x ?? 50).toFixed(1)}%, y ${(editDraftPin.y ?? 50).toFixed(1)}%`;
+      editPinCoords.innerHTML = `${ICON.pin} x ${(editDraftPin.x ?? 50).toFixed(1)}%, y ${(editDraftPin.y ?? 50).toFixed(1)}%`;
     } else {
       editPinCoords.textContent = 'Няма избран пин.';
     }
@@ -1141,6 +1190,7 @@ function enterEditMode() {
   const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
   if (!memory) return;
 
+  if (editTitleInput) editTitleInput.value = memory.title || '';
   editTextArea.value = memory.text;
   editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
   editLocation.value = memory.location || '';
@@ -1228,7 +1278,8 @@ detailEditForm.addEventListener('submit', async (event) => {
   const memory = appState.memories.find((m) => m.createdAt === memoryId);
   if (!memory) return;
 
-  const newText = editTextArea.value.trim() || memory.text;
+  const newTitle = (editTitleInput ? editTitleInput.value.trim() : '') || memory.title || memory.text;
+  const newText = editTextArea.value.trim();
   const newEventDate = editEventDate.value || memory.eventDate;
   const newLocation = editLocation.value.trim();
   const newPerson = editPerson.value.trim();
@@ -1242,6 +1293,7 @@ detailEditForm.addEventListener('submit', async (event) => {
 
   // Update memory row in Supabase
   const { error: updateError } = await sb.from('memories').update({
+    title: newTitle,
     text: newText,
     event_date: newEventDate,
     location: newLocation,
@@ -1292,6 +1344,7 @@ detailEditForm.addEventListener('submit', async (event) => {
     const keptPaths = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i));
     appState.memories[idx] = mapMemory(updatedRow ?? {
       id: memoryId,
+      title: newTitle,
       text: newText,
       event_date: newEventDate,
       location: newLocation,
@@ -1612,8 +1665,9 @@ memoryForm.addEventListener('submit', async (event) => {
     return;
   }
 
+  const title = document.querySelector('#memory-title').value.trim();
   const text = document.querySelector('#memory-text').value.trim();
-  if (!text) return;
+  if (!title) return;
 
   const eventDateInput = document.querySelector('#memory-event-date').value;
   const item = document.querySelector('#memory-item').value.trim();
@@ -1630,6 +1684,7 @@ memoryForm.addEventListener('submit', async (event) => {
 
   const { data: inserted, error } = await sb.from('memories').insert({
     user_id: appState.userId,
+    title,
     text,
     event_date: eventDateInput || new Date().toISOString().slice(0, 10),
     person,
@@ -1670,6 +1725,7 @@ memoryForm.addEventListener('submit', async (event) => {
   switchTab('create-memory');
   showHomeDashboard();
   memoryForm.reset();
+  if (document.querySelector('#memory-title')) document.querySelector('#memory-title').value = '';
   renderMediaPreview();
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
   submitBtn.disabled = false;
@@ -1716,6 +1772,86 @@ function closeLightbox() {
 document.querySelector('#lightbox-close').addEventListener('click', closeLightbox);
 lightboxEl.addEventListener('click', (e) => { if (e.target === lightboxEl) closeLightbox(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+async function deletePersonByName(name) {
+  const person = appState.people.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (!person) return;
+  const { error } = await sb.from('people').delete().eq('id', person.id).eq('user_id', appState.userId);
+  if (error) {
+    alert(`Грешка при изтриване: ${error.message}`);
+    return;
+  }
+  if (person.photoPath) {
+    await sb.storage.from('people-photos').remove([person.photoPath]);
+  }
+  appState.people = appState.people.filter((p) => p.id !== person.id);
+}
+
+function renderPickerSavedPins() {
+  if (!pickerMap || mapMode !== 'maplibre') return;
+  pickerSavedMarkers.forEach((m) => m.remove());
+  pickerSavedMarkers = [];
+  appState.memories.forEach((memory) => {
+    if (!memory.pin || !Number.isFinite(memory.pin.lat) || !Number.isFinite(memory.pin.lng)) return;
+    const marker = new maplibregl.Marker({ color: '#888888', scale: 0.7 })
+      .setLngLat([memory.pin.lng, memory.pin.lat])
+      .addTo(pickerMap);
+    const el = marker.getElement();
+    el.style.opacity = '0.5';
+    el.style.cursor = 'pointer';
+    el.title = memory.location || (memory.title || memory.text).slice(0, 40);
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      appState.draftPin = { lat: memory.pin.lat, lng: memory.pin.lng };
+      const locationInput = document.querySelector('#memory-location');
+      if (locationInput && memory.location) locationInput.value = memory.location;
+      renderDraftPin();
+    });
+    pickerSavedMarkers.push(marker);
+  });
+}
+
+function openPhotosOverlay() {
+  document.querySelector('#photos-overlay')?.remove();
+  const allPhotos = appState.memories.flatMap((m) => m.mediaDataUrls);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'photos-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--background,#FBF8F3);overflow-y:auto;padding:16px;padding-bottom:80px';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px';
+  const titleEl = document.createElement('h3');
+  titleEl.style.cssText = 'margin:0;font-size:1rem;font-weight:600';
+  titleEl.textContent = `Всички снимки (${allPhotos.length})`;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'ghost tiny';
+  closeBtn.textContent = '← Назад';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  header.append(titleEl, closeBtn);
+  overlay.appendChild(header);
+
+  if (!allPhotos.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Няма добавени снимки.';
+    overlay.appendChild(empty);
+  } else {
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:4px';
+    allPhotos.forEach((url, idx) => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.style.cssText = 'width:100%;aspect-ratio:1/1;object-fit:cover;cursor:zoom-in;border-radius:4px';
+      img.addEventListener('click', () => openLightbox(allPhotos, idx));
+      grid.appendChild(img);
+    });
+    overlay.appendChild(grid);
+  }
+
+  document.querySelector('#app-screen').appendChild(overlay);
+}
 
 initMaps();
 switchTab('create-memory');
