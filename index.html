@@ -148,8 +148,13 @@
               </div>
               <form id="memory-form" class="stacked-form">
                 <label>
-                  Описание <span class="required-mark">*</span>
-                  <textarea id="memory-text" rows="3" placeholder="Какво се случи?" required></textarea>
+                  Заглавие <span class="required-mark">*</span>
+                  <input type="text" id="memory-title" placeholder="Кратко заглавие на спомена" required />
+                </label>
+
+                <label>
+                  Описание <span class="field-hint">(опционално)</span>
+                  <textarea id="memory-text" rows="3" placeholder="Разкажи повече..."></textarea>
                 </label>
 
                 <label>
@@ -323,8 +328,13 @@
             <form id="detail-edit-form" class="stacked-form detail-edit-form">
 
               <label>
-                Описание <span class="required-mark">*</span>
-                <textarea id="edit-text" rows="4" placeholder="Какво се случи?"></textarea>
+                Заглавие <span class="required-mark">*</span>
+                <input type="text" id="edit-title" placeholder="Кратко заглавие на спомена" />
+              </label>
+
+              <label>
+                Описание <span class="field-hint">(опционално)</span>
+                <textarea id="edit-text" rows="4" placeholder="Разкажи повече..."></textarea>
               </label>
 
               <label>

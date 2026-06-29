@@ -1031,6 +1031,54 @@ button.tiny {
   }
 }
 
+/* ── DELETE PERSON BUTTON ───────────────────────────────────────── */
+
+.btn-delete-person {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-delete-person:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+.person-card {
+  position: relative;
+}
+
+/* ── CHIP ICON ──────────────────────────────────────────────────── */
+
+.chip-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+/* ── STAT CARD HOVER ────────────────────────────────────────────── */
+
+.stat-card:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.stat-card:active {
+  transform: scale(0.96);
+}
+
 @media (min-width: 768px) {
   body {
     display: flex;
