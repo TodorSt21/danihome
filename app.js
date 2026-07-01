@@ -107,10 +107,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+const MAPTILER_KEY = 'EUCoLY6ma4XHK9Gt2Xxq';
+
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219], // [lat, lng]
   zoom: 6,
-  styleUrl: 'https://api.maptiler.com/maps/streets/style.json?key=EUCoLY6ma4XHK9Gt2Xxq',
+  styleUrl: `https://api.maptiler.com/maps/streets/style.json?key=${MAPTILER_KEY}`,
 };
 
 const MAP_CONFIG = {
@@ -593,7 +595,10 @@ function initPickerMap() {
     appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
     renderDraftPin();
   });
-  pickerMap.on('load', () => renderPickerSavedPins());
+  pickerMap.on('load', () => {
+    renderPickerSavedPins();
+    if (appState.draftPin) renderDraftPin();
+  });
 }
 
 function initOverviewMap() {
@@ -615,6 +620,11 @@ function renderDraftPin() {
     }
     if (!appState.draftPin) {
       memoryPinCoords.textContent = 'Няма избран пин.';
+      return;
+    }
+    if (!pickerMap) {
+      // Map not yet initialised; show coords so user knows the pin is queued
+      memoryPinCoords.innerHTML = `${ICON.pin} ${appState.draftPin.lat.toFixed(5)}, ${appState.draftPin.lng.toFixed(5)}`;
       return;
     }
     pickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
@@ -1773,6 +1783,120 @@ document.querySelector('#lightbox-close').addEventListener('click', closeLightbo
 lightboxEl.addEventListener('click', (e) => { if (e.target === lightboxEl) closeLightbox(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
 
+// ── Location geocoding ───────────────────────────────────────────────
+
+async function geocodeLocation(query) {
+  try {
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${MAPTILER_KEY}&language=bg&limit=5`;
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return (data.features || []).map((f) => ({
+      name: f.place_name || f.text || '',
+      lat: f.center[1],
+      lng: f.center[0],
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function getSavedLocations(query) {
+  const lower = query.trim().toLowerCase();
+  if (!lower) return [];
+  const seen = new Set();
+  const results = [];
+  for (const m of appState.memories) {
+    if (!m.location || !m.pin || !Number.isFinite(m.pin.lat) || !Number.isFinite(m.pin.lng)) continue;
+    const loc = m.location.trim();
+    if (!loc || seen.has(loc.toLowerCase())) continue;
+    if (loc.toLowerCase().includes(lower)) {
+      seen.add(loc.toLowerCase());
+      results.push({ name: loc, lat: m.pin.lat, lng: m.pin.lng, saved: true });
+    }
+  }
+  return results;
+}
+
+function attachLocationAutocomplete(inputEl, onSelect, onClear) {
+  if (!inputEl) return;
+  let debounceTimer;
+  let dropdown = null;
+
+  function closeDropdown() {
+    if (dropdown) { dropdown.remove(); dropdown = null; }
+  }
+
+  function openDropdown(items) {
+    closeDropdown();
+    if (!items.length) return;
+
+    dropdown = document.createElement('ul');
+    dropdown.className = 'location-suggestions';
+
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = 'location-suggestion-item' + (item.saved ? ' saved' : '');
+
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'suggestion-icon';
+      if (item.saved) {
+        iconSpan.textContent = '★';
+      } else {
+        iconSpan.innerHTML = ICON.pin;
+      }
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'suggestion-name';
+      nameSpan.textContent = item.name;
+
+      li.append(iconSpan, nameSpan);
+
+      if (item.saved) {
+        const hintSpan = document.createElement('small');
+        hintSpan.className = 'suggestion-hint';
+        hintSpan.textContent = 'Използвано преди';
+        li.appendChild(hintSpan);
+      }
+
+      li.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // keep focus so blur doesn't close before click
+        inputEl.value = item.name;
+        closeDropdown();
+        onSelect(item);
+      });
+
+      dropdown.appendChild(li);
+    });
+
+    // Anchor below the input inside the label wrapper
+    const parent = inputEl.parentElement;
+    parent.style.position = 'relative';
+    parent.appendChild(dropdown);
+  }
+
+  inputEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const query = inputEl.value.trim();
+    if (!query) {
+      closeDropdown();
+      onClear?.();
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      const saved = getSavedLocations(query);
+      const remote = await geocodeLocation(query);
+      const savedNames = new Set(saved.map((s) => s.name.toLowerCase()));
+      const unique = remote.filter((r) => !savedNames.has(r.name.toLowerCase()));
+      openDropdown([...saved, ...unique]);
+    }, 600);
+  });
+
+  // Delay close to let mousedown fire first
+  inputEl.addEventListener('blur', () => { setTimeout(closeDropdown, 150); });
+  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDropdown(); });
+}
+
 async function deletePersonByName(name) {
   const person = appState.people.find((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
   if (!person) return;
@@ -1852,6 +1976,28 @@ function openPhotosOverlay() {
 
   document.querySelector('#app-screen').appendChild(overlay);
 }
+
+// Wire up location geocoding for the add form
+attachLocationAutocomplete(
+  document.querySelector('#memory-location'),
+  (item) => {
+    appState.draftPin = { lat: item.lat, lng: item.lng };
+    renderDraftPin();
+    if (pickerMap) pickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
+  },
+  () => { appState.draftPin = null; renderDraftPin(); },
+);
+
+// Wire up location geocoding for the edit form
+attachLocationAutocomplete(
+  document.querySelector('#edit-location'),
+  (item) => {
+    editDraftPin = { lat: item.lat, lng: item.lng };
+    renderEditPin();
+    if (editPickerMap) editPickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
+  },
+  () => { editDraftPin = null; renderEditPin(); },
+);
 
 initMaps();
 switchTab('create-memory');
