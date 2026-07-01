@@ -1031,6 +1031,70 @@ button.tiny {
   }
 }
 
+/* ── LOCATION SUGGESTIONS DROPDOWN ─────────────────────────────── */
+
+.location-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  z-index: 120;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13);
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.location-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: background 0.12s;
+  user-select: none;
+}
+
+.location-suggestion-item:hover {
+  background: rgba(47, 182, 166, 0.08);
+}
+
+.location-suggestion-item.saved {
+  color: var(--primary);
+}
+
+.suggestion-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+.suggestion-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-hint {
+  font-size: 0.7rem;
+  color: var(--primary);
+  font-weight: 600;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
 /* ── DELETE PERSON BUTTON ───────────────────────────────────────── */
 
 .btn-delete-person {
