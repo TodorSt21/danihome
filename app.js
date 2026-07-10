@@ -225,10 +225,35 @@ async function deleteMemoryById(id) {
   appState.memories = appState.memories.filter((m) => m.createdAt !== id);
 }
 
+async function compressImage(file, maxWidth = 1600, quality = 0.8) {
+  if (!file.type || !file.type.startsWith('image/')) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxWidth / bitmap.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const name = file.name || 'photo.jpg';
+    return await new Promise((resolve) => {
+      canvas.toBlob(
+        (blob) => resolve(new File([blob], name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })),
+        'image/jpeg',
+        quality,
+      );
+    });
+  } catch (e) {
+    console.error('compressImage error, uploading original:', e);
+    return file;
+  }
+}
+
 async function uploadMemPhotoFile(file, userId, memoryId, position) {
-  const ext = file.name.split('.').pop() || 'jpg';
+  const compressed = await compressImage(file);
+  const ext = compressed.name.split('.').pop() || 'jpg';
   const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
-  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, file);
+  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, compressed);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
   if (dbErr) {
@@ -239,9 +264,10 @@ async function uploadMemPhotoFile(file, userId, memoryId, position) {
 }
 
 async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
-  const ext = blob.type.split('/')[1] || 'jpg';
+  const compressed = await compressImage(blob);
+  const ext = compressed.type.split('/')[1] || 'jpg';
   const path = `${userId}/${memoryId}/${position}-${Date.now()}.${ext}`;
-  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, blob);
+  const { error: upErr } = await sb.storage.from('memory-photos').upload(path, compressed);
   if (upErr) throw new Error(upErr.message);
   const { error: dbErr } = await sb.from('memory_media').insert({ memory_id: memoryId, storage_path: path, position });
   if (dbErr) {
@@ -252,9 +278,10 @@ async function uploadMemPhotoBlob(blob, userId, memoryId, position) {
 }
 
 async function uploadPeoplePhotoBlob(blob, userId) {
-  const ext = blob.type.split('/')[1] || 'jpg';
+  const compressed = await compressImage(blob);
+  const ext = compressed.type.split('/')[1] || 'jpg';
   const path = `${userId}/${Date.now()}.${ext}`;
-  const { error } = await sb.storage.from('people-photos').upload(path, blob);
+  const { error } = await sb.storage.from('people-photos').upload(path, compressed);
   if (error) throw new Error(error.message);
   return path;
 }
@@ -2107,4 +2134,22 @@ sb.auth.onAuthStateChange((event, session) => {
     setScreen();
     render();
   }
+});
+
+// ── Toast + offline detection ─────────────────────────────────────────
+
+function showToast(msg) {
+  document.querySelector('#app-toast')?.remove();
+  const el = document.createElement('div');
+  el.id = 'app-toast';
+  el.className = 'app-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+window.addEventListener('offline', () => showToast('Няма интернет връзка'));
+window.addEventListener('online', () => {
+  showToast('Връзката е възстановена');
+  tryLoadData();
 });
