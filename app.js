@@ -52,6 +52,7 @@ const detailTitle = document.querySelector('#detail-title');
 const detailDate = document.querySelector('#detail-date');
 const detailLocationEl = document.querySelector('#detail-location');
 const detailStaticMapEl = document.querySelector('#detail-static-map');
+const detailPinChipsEl = document.querySelector('#detail-pin-chips');
 const detailPersonEl = document.querySelector('#detail-person');
 const detailItemEl = document.querySelector('#detail-item');
 let detailMapInstance = null;
@@ -108,7 +109,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 const MAPTILER_KEY = 'EUCoLY6ma4XHK9Gt2Xxq';
-const MAX_PINS = 10;
+const MAX_PINS = 5;
 
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219], // [lat, lng]
@@ -333,43 +334,42 @@ function normalizePins(raw) {
   return arr.map(normalizeOnePin).filter(Boolean).slice(0, MAX_PINS);
 }
 
-function createNumberedMarkerEl(number) {
-  const el = document.createElement('div');
-  el.className = 'pin-marker-number';
-  el.textContent = String(number);
-  return el;
-}
-
-function renderPinListEl(listEl, coordsEl, pins, onRemove) {
-  if (!listEl || !coordsEl) return;
+// Renders each pin as a "📍 name ×" chip. Pass onRemove to make chips
+// removable (add/edit forms); omit it for a read-only list (detail view).
+function renderPinChips(listEl, coordsEl, pins, onRemove) {
+  if (!listEl) return;
   listEl.innerHTML = '';
-  if (!pins.length) {
-    coordsEl.textContent = 'Няма избрани пинове.';
-  } else {
-    coordsEl.textContent = `${pins.length} ${pins.length === 1 ? 'пин' : 'пина'} избрани (макс. ${MAX_PINS}).`;
+  if (coordsEl) {
+    coordsEl.textContent = pins.length
+      ? `${pins.length} ${pins.length === 1 ? 'локация' : 'локации'} избрани (макс. ${MAX_PINS}).`
+      : 'Няма избрани локации.';
   }
   pins.forEach((pin, idx) => {
-    const li = document.createElement('li');
-    li.className = 'pin-list-item';
+    const chip = document.createElement('li');
+    chip.className = 'pin-chip';
 
-    const badge = document.createElement('span');
-    badge.className = 'pin-list-badge';
-    badge.textContent = String(idx + 1);
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'pin-chip-icon';
+    iconSpan.innerHTML = ICON.pin;
 
     const label = document.createElement('span');
-    label.className = 'pin-list-label';
+    label.className = 'pin-chip-label';
     label.textContent = pin.name
       || (Number.isFinite(pin.lat) ? `${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}` : `x ${(pin.x ?? 0).toFixed(1)}%, y ${(pin.y ?? 0).toFixed(1)}%`);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'pin-list-remove';
-    removeBtn.setAttribute('aria-label', 'Премахни пин');
-    removeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-    removeBtn.addEventListener('click', () => onRemove(idx));
+    chip.append(iconSpan, label);
 
-    li.append(badge, label, removeBtn);
-    listEl.appendChild(li);
+    if (onRemove) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'pin-chip-remove';
+      removeBtn.setAttribute('aria-label', 'Премахни локация');
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => onRemove(idx));
+      chip.appendChild(removeBtn);
+    }
+
+    listEl.appendChild(chip);
   });
 }
 
@@ -705,9 +705,9 @@ function renderDraftPins() {
     pickerMarkers.forEach((m) => m.remove());
     pickerMarkers = [];
     if (pickerMap) {
-      pins.forEach((pin, idx) => {
+      pins.forEach((pin) => {
         if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
-        const marker = new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
+        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
           .setLngLat([pin.lng, pin.lat])
           .addTo(pickerMap);
         pickerMarkers.push(marker);
@@ -717,12 +717,12 @@ function renderDraftPins() {
     memoryPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
     pins.forEach((pin, idx) => {
       if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
-        addFallbackPin(memoryPinPickerEl, pin.x, pin.y, pin.name || `Пин ${idx + 1}`);
+        addFallbackPin(memoryPinPickerEl, pin.x, pin.y, pin.name || `Локация ${idx + 1}`);
       }
     });
   }
 
-  renderPinListEl(memoryPinListEl, memoryPinCoords, pins, (idx) => {
+  renderPinChips(memoryPinListEl, memoryPinCoords, pins, (idx) => {
     appState.draftPins.splice(idx, 1);
     renderDraftPins();
   });
@@ -1165,7 +1165,7 @@ function renderMemoryDetail() {
   }
   setMetaRow(detailLocationEl, ICON.pin, memory.location);
 
-  // Static pin/journey map — actual MapLibre init is deferred until overlay is visible
+  // Static pin map — actual MapLibre init is deferred until overlay is visible
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
   const detailGeoPins = (memory.pins || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
   if (detailGeoPins.length && mapMode === 'maplibre') {
@@ -1173,6 +1173,13 @@ function renderMemoryDetail() {
     detailStaticMapEl.innerHTML = '';
   } else {
     detailStaticMapEl.classList.add('hidden');
+  }
+
+  if (memory.pins && memory.pins.length) {
+    detailPinChipsEl.classList.remove('hidden');
+    renderPinChips(detailPinChipsEl, null, memory.pins, null);
+  } else {
+    detailPinChipsEl.classList.add('hidden');
   }
 
   setMetaRow(detailPersonEl, '👤', memory.persons.join(', '));
@@ -1227,22 +1234,6 @@ function initDetailStaticMap() {
 
   detailMapInstance.on('load', () => {
     if (geoPins.length > 1) {
-      detailMapInstance.addSource('journey-route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'LineString', coordinates: geoPins.map((p) => [p.lng, p.lat]) },
-        },
-      });
-      detailMapInstance.addLayer({
-        id: 'journey-route-line',
-        type: 'line',
-        source: 'journey-route',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#2BB0A0', 'line-width': 2.5, 'line-dasharray': [2, 2] },
-      });
-
       const bounds = geoPins.reduce(
         (b, p) => b.extend([p.lng, p.lat]),
         new maplibregl.LngLatBounds([geoPins[0].lng, geoPins[0].lat], [geoPins[0].lng, geoPins[0].lat]),
@@ -1250,11 +1241,10 @@ function initDetailStaticMap() {
       detailMapInstance.fitBounds(bounds, { padding: 40, maxZoom: 14 });
     }
 
-    geoPins.forEach((pin, idx) => {
-      const marker = geoPins.length > 1
-        ? new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
-        : new maplibregl.Marker({ color: '#2BB0A0' });
-      marker.setLngLat([pin.lng, pin.lat]).addTo(detailMapInstance);
+    geoPins.forEach((pin) => {
+      new maplibregl.Marker({ color: '#2BB0A0' })
+        .setLngLat([pin.lng, pin.lat])
+        .addTo(detailMapInstance);
     });
   });
 
@@ -1268,9 +1258,9 @@ function renderEditPins() {
     editPickerMarkers.forEach((m) => m.remove());
     editPickerMarkers = [];
     if (editPickerMap) {
-      pins.forEach((pin, idx) => {
+      pins.forEach((pin) => {
         if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
-        const marker = new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
+        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
           .setLngLat([pin.lng, pin.lat])
           .addTo(editPickerMap);
         editPickerMarkers.push(marker);
@@ -1280,12 +1270,12 @@ function renderEditPins() {
     editPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
     pins.forEach((pin, idx) => {
       if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
-        addFallbackPin(editPinPickerEl, pin.x, pin.y, pin.name || `Пин ${idx + 1}`);
+        addFallbackPin(editPinPickerEl, pin.x, pin.y, pin.name || `Локация ${idx + 1}`);
       }
     });
   }
 
-  renderPinListEl(editPinListEl, editPinCoords, pins, (idx) => {
+  renderPinChips(editPinListEl, editPinCoords, pins, (idx) => {
     editDraftPins.splice(idx, 1);
     renderEditPins();
   });

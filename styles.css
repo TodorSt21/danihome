@@ -1168,84 +1168,69 @@ button.tiny {
   transform: scale(0.96);
 }
 
-/* ── MULTI-PIN PICKER ───────────────────────────────────────────── */
-
-.pin-marker-number {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-family: 'DM Sans', system-ui, sans-serif;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-}
+/* ── VISITED-PLACES CHIPS ───────────────────────────────────────── */
 
 .pin-list {
   list-style: none;
   margin: 8px 0 0;
   padding: 0;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.pin-list-item {
+.pin-chip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 0.82rem;
+  gap: 5px;
+  background: rgba(47, 182, 166, 0.09);
+  color: var(--primary);
+  border: 1px solid rgba(47, 182, 166, 0.25);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  max-width: 100%;
 }
 
-.pin-list-badge {
+.pin-chip-icon {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  font-size: 0.68rem;
-  font-weight: 700;
   display: flex;
   align-items: center;
-  justify-content: center;
 }
 
-.pin-list-label {
-  flex: 1;
+.pin-chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-primary);
 }
 
-.pin-list-remove {
+.pin-chip-remove {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: transparent;
+  color: var(--primary);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   box-shadow: none;
   cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
   transition: background 0.15s;
 }
 
-.pin-list-remove:hover {
-  background: rgba(239, 68, 68, 0.22);
+.pin-chip-remove:hover {
+  background: rgba(47, 182, 166, 0.18);
+}
+
+.detail-pin-chips {
+  margin-top: -4px;
 }
 
 @media (min-width: 768px) {
