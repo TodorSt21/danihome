@@ -1480,24 +1480,22 @@ function revokeEditPhotoBlobUrls() {
   });
 }
 
-// Renders the horizontal photo strip in the edit form. Item 0 gets a "Корица"
-// (cover) badge since it becomes the timeline card cover image. Reordering
-// uses Pointer Events (not native HTML5 drag-and-drop) so the same code path
-// works for both mouse and touch/mobile drags.
+// Renders the horizontal photo strip in the edit form as 80x80 thumbnails,
+// each with a ⋮⋮ drag handle (top-left) and a ✕ remove button (top-right).
+// Item 0 gets a "Корица" (cover) badge since it becomes the timeline card
+// cover image. A dashed "+" square after the last photo opens the file
+// picker. Reordering uses Pointer Events (not native HTML5 drag-and-drop) so
+// the same code path works for mouse and touch/mobile drags: while dragging,
+// a floating ghost thumbnail follows the pointer and a blue insertion line
+// shows where the photo will land; the array is only reordered on drop.
 function renderEditPhotoStrip() {
   if (!editPhotoStripEl) return;
   editPhotoStripEl.innerHTML = '';
-
-  if (!editPhotoItems.length) {
-    editPhotoStripEl.innerHTML = '<small class="hint">Няма добавени снимки.</small>';
-    return;
-  }
 
   editPhotoItems.forEach((item, idx) => {
     const wrap = document.createElement('div');
     wrap.className = 'photo-strip-item';
     wrap.dataset.index = idx;
-    if (editPhotoDrag && editPhotoDrag.fromIndex === idx) wrap.classList.add('dragging');
 
     const img = document.createElement('img');
     img.className = 'photo-strip-img';
@@ -1506,26 +1504,19 @@ function renderEditPhotoStrip() {
     img.draggable = false;
     wrap.appendChild(img);
 
-    if (idx === 0) {
-      const badge = document.createElement('span');
-      badge.className = 'photo-strip-cover-badge';
-      badge.textContent = 'Корица';
-      wrap.appendChild(badge);
-    }
-
     const handle = document.createElement('button');
     handle.type = 'button';
     handle.className = 'photo-strip-handle';
     handle.setAttribute('aria-label', 'Премести снимка');
-    handle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+    handle.textContent = '⋮⋮';
     handle.addEventListener('pointerdown', (e) => startPhotoDrag(idx, e));
     wrap.appendChild(handle);
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
-    removeBtn.className = 'photo-remove-btn';
-    removeBtn.textContent = '✕';
+    removeBtn.className = 'photo-strip-remove';
     removeBtn.setAttribute('aria-label', 'Изтрий снимка');
+    removeBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     removeBtn.addEventListener('click', () => {
       if (!confirm('Изтрий тази снимка?')) return;
       const [removed] = editPhotoItems.splice(idx, 1);
@@ -1534,36 +1525,101 @@ function renderEditPhotoStrip() {
     });
     wrap.appendChild(removeBtn);
 
+    if (idx === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'photo-strip-cover-badge';
+      badge.textContent = 'Корица';
+      wrap.appendChild(badge);
+    }
+
     editPhotoStripEl.appendChild(wrap);
   });
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'photo-strip-add';
+  addBtn.setAttribute('aria-label', 'Добави снимки');
+  addBtn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  addBtn.addEventListener('click', () => editMediaInput.click());
+  editPhotoStripEl.appendChild(addBtn);
+
+  const insertionLine = document.createElement('div');
+  insertionLine.className = 'photo-strip-insertion-line hidden';
+  editPhotoStripEl.appendChild(insertionLine);
+}
+
+function positionPhotoGhost(ghost, clientX, clientY) {
+  ghost.style.left = `${clientX - 40}px`;
+  ghost.style.top = `${clientY - 40}px`;
 }
 
 function startPhotoDrag(index, event) {
   event.preventDefault();
-  editPhotoDrag = { fromIndex: index };
-  renderEditPhotoStrip();
+  const itemEl = event.currentTarget.closest('.photo-strip-item');
+  if (!itemEl) return;
+  itemEl.classList.add('dragging');
+
+  const ghost = itemEl.querySelector('.photo-strip-img').cloneNode(true);
+  ghost.className = 'photo-strip-ghost';
+  document.body.appendChild(ghost);
+  positionPhotoGhost(ghost, event.clientX, event.clientY);
+
+  editPhotoDrag = { fromIndex: index, insertIndex: index, itemEl, ghost };
   document.addEventListener('pointermove', onPhotoDragMove);
   document.addEventListener('pointerup', onPhotoDragEnd);
 }
 
+function updatePhotoInsertionLine(clientX) {
+  const line = editPhotoStripEl.querySelector('.photo-strip-insertion-line');
+  if (!line) return;
+  const items = [...editPhotoStripEl.querySelectorAll('.photo-strip-item')]
+    .filter((el) => Number(el.dataset.index) !== editPhotoDrag.fromIndex);
+
+  if (!items.length) {
+    line.classList.add('hidden');
+    editPhotoDrag.insertIndex = 0;
+    return;
+  }
+
+  let best = null;
+  items.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    const dist = Math.abs(clientX - center);
+    if (!best || dist < best.dist) best = { el, dist, rect, center };
+  });
+
+  const idx = Number(best.el.dataset.index);
+  const before = clientX < best.center;
+  editPhotoDrag.insertIndex = before ? idx : idx + 1;
+
+  const stripRect = editPhotoStripEl.getBoundingClientRect();
+  const edgeX = before ? best.rect.left : best.rect.right;
+  line.style.left = `${edgeX - stripRect.left + editPhotoStripEl.scrollLeft}px`;
+  line.classList.remove('hidden');
+}
+
 function onPhotoDragMove(event) {
   if (!editPhotoDrag) return;
-  const el = document.elementFromPoint(event.clientX, event.clientY);
-  const itemEl = el?.closest('.photo-strip-item');
-  if (!itemEl) return;
-  const overIndex = Number(itemEl.dataset.index);
-  if (Number.isFinite(overIndex) && overIndex !== editPhotoDrag.fromIndex) {
-    const [moved] = editPhotoItems.splice(editPhotoDrag.fromIndex, 1);
-    editPhotoItems.splice(overIndex, 0, moved);
-    editPhotoDrag.fromIndex = overIndex;
-    renderEditPhotoStrip();
-  }
+  positionPhotoGhost(editPhotoDrag.ghost, event.clientX, event.clientY);
+  updatePhotoInsertionLine(event.clientX);
 }
 
 function onPhotoDragEnd() {
-  editPhotoDrag = null;
+  if (!editPhotoDrag) return;
+  const { fromIndex, insertIndex, itemEl, ghost } = editPhotoDrag;
+  ghost.remove();
+  itemEl?.classList.remove('dragging');
   document.removeEventListener('pointermove', onPhotoDragMove);
   document.removeEventListener('pointerup', onPhotoDragEnd);
+
+  const adjusted = insertIndex > fromIndex ? insertIndex - 1 : insertIndex;
+  if (adjusted !== fromIndex) {
+    const [moved] = editPhotoItems.splice(fromIndex, 1);
+    editPhotoItems.splice(adjusted, 0, moved);
+  }
+
+  editPhotoDrag = null;
   renderEditPhotoStrip();
 }
 
