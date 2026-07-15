@@ -70,9 +70,8 @@ const editActivityTags = document.querySelector('#edit-activity-tags');
 const editEmotionTags = document.querySelector('#edit-emotion-tags');
 const editNotesArea = document.querySelector('#edit-notes');
 const editTitleInput = document.querySelector('#edit-title');
-const editExistingPhotos = document.querySelector('#edit-existing-photos');
+const editPhotoStripEl = document.querySelector('#edit-photo-strip');
 const editMediaInput = document.querySelector('#edit-media');
-const editMediaPreview = document.querySelector('#edit-media-preview');
 const detailEditCancel = document.querySelector('#detail-edit-cancel');
 const editPinPickerEl = document.querySelector('#edit-pin-picker');
 const editPinCoords = document.querySelector('#edit-pin-coords');
@@ -82,7 +81,8 @@ let editPickerMap;
 let editPickerMarkers = [];
 let editLocationFields = [];
 let editActiveLocationIndex = 0;
-let editRemovedPhotoIndices = new Set();
+let editPhotoItems = [];
+let editPhotoDrag = null;
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
 let pendingTokenRefresh = false;
@@ -1474,6 +1474,99 @@ function initEditMap(existingFields) {
   }
 }
 
+function revokeEditPhotoBlobUrls() {
+  editPhotoItems.forEach((item) => {
+    if (item.type === 'new' && item.url) URL.revokeObjectURL(item.url);
+  });
+}
+
+// Renders the horizontal photo strip in the edit form. Item 0 gets a "Корица"
+// (cover) badge since it becomes the timeline card cover image. Reordering
+// uses Pointer Events (not native HTML5 drag-and-drop) so the same code path
+// works for both mouse and touch/mobile drags.
+function renderEditPhotoStrip() {
+  if (!editPhotoStripEl) return;
+  editPhotoStripEl.innerHTML = '';
+
+  if (!editPhotoItems.length) {
+    editPhotoStripEl.innerHTML = '<small class="hint">Няма добавени снимки.</small>';
+    return;
+  }
+
+  editPhotoItems.forEach((item, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-strip-item';
+    wrap.dataset.index = idx;
+    if (editPhotoDrag && editPhotoDrag.fromIndex === idx) wrap.classList.add('dragging');
+
+    const img = document.createElement('img');
+    img.className = 'photo-strip-img';
+    img.src = item.url;
+    img.alt = '';
+    img.draggable = false;
+    wrap.appendChild(img);
+
+    if (idx === 0) {
+      const badge = document.createElement('span');
+      badge.className = 'photo-strip-cover-badge';
+      badge.textContent = 'Корица';
+      wrap.appendChild(badge);
+    }
+
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'photo-strip-handle';
+    handle.setAttribute('aria-label', 'Премести снимка');
+    handle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+    handle.addEventListener('pointerdown', (e) => startPhotoDrag(idx, e));
+    wrap.appendChild(handle);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'photo-remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.setAttribute('aria-label', 'Изтрий снимка');
+    removeBtn.addEventListener('click', () => {
+      if (!confirm('Изтрий тази снимка?')) return;
+      const [removed] = editPhotoItems.splice(idx, 1);
+      if (removed?.type === 'new' && removed.url) URL.revokeObjectURL(removed.url);
+      renderEditPhotoStrip();
+    });
+    wrap.appendChild(removeBtn);
+
+    editPhotoStripEl.appendChild(wrap);
+  });
+}
+
+function startPhotoDrag(index, event) {
+  event.preventDefault();
+  editPhotoDrag = { fromIndex: index };
+  renderEditPhotoStrip();
+  document.addEventListener('pointermove', onPhotoDragMove);
+  document.addEventListener('pointerup', onPhotoDragEnd);
+}
+
+function onPhotoDragMove(event) {
+  if (!editPhotoDrag) return;
+  const el = document.elementFromPoint(event.clientX, event.clientY);
+  const itemEl = el?.closest('.photo-strip-item');
+  if (!itemEl) return;
+  const overIndex = Number(itemEl.dataset.index);
+  if (Number.isFinite(overIndex) && overIndex !== editPhotoDrag.fromIndex) {
+    const [moved] = editPhotoItems.splice(editPhotoDrag.fromIndex, 1);
+    editPhotoItems.splice(overIndex, 0, moved);
+    editPhotoDrag.fromIndex = overIndex;
+    renderEditPhotoStrip();
+  }
+}
+
+function onPhotoDragEnd() {
+  editPhotoDrag = null;
+  document.removeEventListener('pointermove', onPhotoDragMove);
+  document.removeEventListener('pointerup', onPhotoDragEnd);
+  renderEditPhotoStrip();
+}
+
 function enterEditMode() {
   const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
   if (!memory) return;
@@ -1501,39 +1594,17 @@ function enterEditMode() {
   editActiveLocationIndex = 0;
   renderEditLocationFields();
 
-  // Show existing photos with individual delete buttons
-  editRemovedPhotoIndices = new Set();
-  editExistingPhotos.innerHTML = '';
-  (memory.mediaDataUrls || []).forEach((url, i) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'photo-thumb-wrap';
-    wrap.dataset.index = i;
-
-    const img = document.createElement('img');
-    img.className = 'media-preview-item';
-    img.src = url;
-    img.alt = '';
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'photo-remove-btn';
-    removeBtn.textContent = '✕';
-    removeBtn.setAttribute('aria-label', 'Изтрий снимка');
-    removeBtn.addEventListener('click', () => {
-      if (!confirm('Изтрий тази снимка?')) return;
-      editRemovedPhotoIndices.add(i);
-      wrap.classList.add('photo-removed');
-    });
-
-    wrap.appendChild(img);
-    wrap.appendChild(removeBtn);
-    editExistingPhotos.appendChild(wrap);
-  });
-  if (!memory.mediaDataUrls?.length) {
-    editExistingPhotos.innerHTML = '<small class="hint">Няма добавени снимки.</small>';
-  }
-
-  editMediaPreview.innerHTML = '';
+  // Build the photo strip from existing photos, in their saved order.
+  // New files added via the file input get appended and can be dragged
+  // to any position (handled by renderEditPhotoStrip/startPhotoDrag).
+  revokeEditPhotoBlobUrls();
+  editPhotoItems = (memory.mediaPaths || []).map((path, i) => ({
+    type: 'existing',
+    path,
+    url: memory.mediaDataUrls[i],
+  }));
+  editPhotoDrag = null;
+  renderEditPhotoStrip();
   editMediaInput.value = '';
 
   detailView.classList.add('hidden');
@@ -1571,13 +1642,11 @@ detailEditCancel.addEventListener('click', () => {
 });
 
 editMediaInput.addEventListener('change', () => {
-  editMediaPreview.innerHTML = '';
-  [...editMediaInput.files].slice(0, 6).filter((f) => f.type.startsWith('image/')).forEach((file) => {
-    const img = document.createElement('img');
-    img.className = 'media-preview-item';
-    img.src = URL.createObjectURL(file);
-    editMediaPreview.appendChild(img);
+  [...editMediaInput.files].filter((f) => f.type.startsWith('image/')).forEach((file) => {
+    editPhotoItems.push({ type: 'new', file, url: URL.createObjectURL(file) });
   });
+  editMediaInput.value = '';
+  renderEditPhotoStrip();
 });
 
 detailEditForm.addEventListener('submit', async (event) => {
@@ -1619,29 +1688,31 @@ detailEditForm.addEventListener('submit', async (event) => {
     return;
   }
 
-  // Remove deleted photos
-  if (editRemovedPhotoIndices.size > 0) {
-    const removedPaths = (memory.mediaPaths || []).filter((_, i) => editRemovedPhotoIndices.has(i));
-    if (removedPaths.length) {
-      for (const path of removedPaths) {
-        const { error: delRowErr } = await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
-        if (delRowErr) console.error('memory_media delete error:', delRowErr);
-      }
-      const { error: delStorageErr } = await sb.storage.from('memory-photos').remove(removedPaths);
-      if (delStorageErr) console.error('Storage remove error:', delStorageErr);
+  // Remove photos that were dropped from the strip
+  const keptExistingPaths = editPhotoItems.filter((it) => it.type === 'existing').map((it) => it.path);
+  const removedPaths = (memory.mediaPaths || []).filter((p) => !keptExistingPaths.includes(p));
+  if (removedPaths.length) {
+    for (const path of removedPaths) {
+      const { error: delRowErr } = await sb.from('memory_media').delete().eq('storage_path', path).eq('memory_id', memoryId);
+      if (delRowErr) console.error('memory_media delete error:', delRowErr);
     }
+    const { error: delStorageErr } = await sb.storage.from('memory-photos').remove(removedPaths);
+    if (delStorageErr) console.error('Storage remove error:', delStorageErr);
   }
 
-  // Upload new photos, collect successfully uploaded paths for the fallback
-  const newFiles = [...editMediaInput.files].filter((f) => f.type.startsWith('image/'));
-  const existingCount = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i)).length;
-  const uploadedPaths = [];
-  for (let i = 0; i < newFiles.length; i++) {
-    try {
-      const p = await uploadMemPhotoFile(newFiles[i], appState.userId, memoryId, existingCount + i);
-      uploadedPaths.push(p);
-    } catch (uploadErr) {
-      console.error('Photo upload error:', uploadErr);
+  // Persist the strip's current order: update position for kept existing
+  // photos, then upload new photos using their position in that same order.
+  for (let i = 0; i < editPhotoItems.length; i++) {
+    const item = editPhotoItems[i];
+    if (item.type === 'existing') {
+      const { error: posErr } = await sb.from('memory_media').update({ position: i }).eq('storage_path', item.path).eq('memory_id', memoryId);
+      if (posErr) console.error('memory_media position update error:', posErr);
+    } else {
+      try {
+        item.uploadedPath = await uploadMemPhotoFile(item.file, appState.userId, memoryId, i);
+      } catch (uploadErr) {
+        console.error('Photo upload error:', uploadErr);
+      }
     }
   }
 
@@ -1650,7 +1721,12 @@ detailEditForm.addEventListener('submit', async (event) => {
   if (refetchErr) console.error('Memory re-fetch error:', refetchErr);
   const idx = appState.memories.findIndex((m) => m.createdAt === memoryId);
   if (idx !== -1) {
-    const keptPaths = (memory.mediaPaths || []).filter((_, i) => !editRemovedPhotoIndices.has(i));
+    const finalMedia = editPhotoItems
+      .map((item, i) => ({
+        storage_path: item.type === 'existing' ? item.path : item.uploadedPath,
+        position: i,
+      }))
+      .filter((m) => m.storage_path);
     appState.memories[idx] = mapMemory(updatedRow ?? {
       id: memoryId,
       title: newTitle,
@@ -1662,7 +1738,7 @@ detailEditForm.addEventListener('submit', async (event) => {
       notes: newNotes,
       pin: editPinsForSave.length ? editPinsForSave : null,
       tags: newTags,
-      memory_media: [...keptPaths, ...uploadedPaths].map((p, i) => ({ storage_path: p, position: i })),
+      memory_media: finalMedia,
     });
   }
 
