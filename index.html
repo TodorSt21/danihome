@@ -194,11 +194,12 @@
 
                 <div class="map-picker-wrap">
                   <div class="card-heading-with-action">
-                    <strong class="field-label">Пин на карта <span class="field-hint">(опционално)</span></strong>
-                    <button type="button" id="clear-pin" class="ghost tiny">Изчисти</button>
+                    <strong class="field-label">Пинове на картата <span class="field-hint">(до 10, опционално)</span></strong>
+                    <button type="button" id="clear-pin" class="ghost tiny">Изчисти всички</button>
                   </div>
-                  <div id="memory-pin-picker" class="map-board" aria-label="Избери пин"></div>
-                  <small id="memory-pin-coords" class="hint">Няма избран пин.</small>
+                  <div id="memory-pin-picker" class="map-board" aria-label="Избери пинове"></div>
+                  <small id="memory-pin-coords" class="hint">Няма избрани пинове.</small>
+                  <ul id="memory-pin-list" class="pin-list"></ul>
                 </div>
 
                 <label>
@@ -349,11 +350,12 @@
 
               <div class="map-picker-wrap">
                 <div class="card-heading-with-action">
-                  <strong class="field-label">Пин на картата <span class="field-hint">(кликни за промяна)</span></strong>
-                  <button type="button" id="edit-clear-pin" class="ghost tiny">Изчисти пин</button>
+                  <strong class="field-label">Пинове на картата <span class="field-hint">(до 10, кликни за добавяне)</span></strong>
+                  <button type="button" id="edit-clear-pin" class="ghost tiny">Изчисти всички</button>
                 </div>
-                <div id="edit-pin-picker" class="map-board" aria-label="Избери пин"></div>
-                <small id="edit-pin-coords" class="hint">Няма избран пин.</small>
+                <div id="edit-pin-picker" class="map-board" aria-label="Избери пинове"></div>
+                <small id="edit-pin-coords" class="hint">Няма избрани пинове.</small>
+                <ul id="edit-pin-list" class="pin-list"></ul>
               </div>
 
               <label>

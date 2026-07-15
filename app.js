@@ -79,8 +79,8 @@ const editPinCoords = document.querySelector('#edit-pin-coords');
 const editClearPinBtn = document.querySelector('#edit-clear-pin');
 
 let editPickerMap;
-let editPickerMarker;
-let editDraftPin = null;
+let editPickerMarkers = [];
+let editDraftPins = [];
 let editRemovedPhotoIndices = new Set();
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
@@ -108,6 +108,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 const MAPTILER_KEY = 'EUCoLY6ma4XHK9Gt2Xxq';
+const MAX_PINS = 10;
 
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219], // [lat, lng]
@@ -126,7 +127,7 @@ let appState = {
   memories: [],
   people: [],
   activeTag: null,
-  draftPin: null,
+  draftPins: [],
   selectedPerson: null,
   selectedMemory: null,
   loading: false,
@@ -134,10 +135,13 @@ let appState = {
 
 let mapMode = 'fallback';
 let pickerMap;
-let pickerMarker;
+let pickerMarkers = [];
 let overviewMap;
 let overviewMarkers = [];
 let pickerSavedMarkers = [];
+
+const memoryPinListEl = document.querySelector('#memory-pin-list');
+const editPinListEl = document.querySelector('#edit-pin-list');
 
 // --- Supabase helpers ---
 
@@ -160,7 +164,7 @@ function mapMemory(row) {
     persons: parsePeople(row.person),
     items: parsePeople(row.item),
     notes: row.notes || '',
-    pin: normalizePin(row.pin),
+    pins: normalizePins(row.pin),
     tags: normalizeTagGroups(row.tags),
     mediaDataUrls: media.map((m) => memPhotoUrl(m.storage_path)),
     mediaPaths: media.map((m) => m.storage_path),
@@ -310,11 +314,63 @@ const ICON = {
 
 // --- Core functions ---
 
-function normalizePin(pin) {
+function normalizeOnePin(pin) {
   if (!pin) return null;
-  if (Number.isFinite(pin.lat) && Number.isFinite(pin.lng)) return { lat: Number(pin.lat), lng: Number(pin.lng) };
-  if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) return { x: Number(pin.x), y: Number(pin.y) };
+  if (Number.isFinite(pin.lat) && Number.isFinite(pin.lng)) {
+    return { lat: Number(pin.lat), lng: Number(pin.lng), name: pin.name || '' };
+  }
+  if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
+    return { x: Number(pin.x), y: Number(pin.y), name: pin.name || '' };
+  }
   return null;
+}
+
+// Accepts either the new array-of-pins format or the old single-pin object
+// format (backward compatibility with memories saved before multi-pin support).
+function normalizePins(raw) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.map(normalizeOnePin).filter(Boolean).slice(0, MAX_PINS);
+}
+
+function createNumberedMarkerEl(number) {
+  const el = document.createElement('div');
+  el.className = 'pin-marker-number';
+  el.textContent = String(number);
+  return el;
+}
+
+function renderPinListEl(listEl, coordsEl, pins, onRemove) {
+  if (!listEl || !coordsEl) return;
+  listEl.innerHTML = '';
+  if (!pins.length) {
+    coordsEl.textContent = 'Няма избрани пинове.';
+  } else {
+    coordsEl.textContent = `${pins.length} ${pins.length === 1 ? 'пин' : 'пина'} избрани (макс. ${MAX_PINS}).`;
+  }
+  pins.forEach((pin, idx) => {
+    const li = document.createElement('li');
+    li.className = 'pin-list-item';
+
+    const badge = document.createElement('span');
+    badge.className = 'pin-list-badge';
+    badge.textContent = String(idx + 1);
+
+    const label = document.createElement('span');
+    label.className = 'pin-list-label';
+    label.textContent = pin.name
+      || (Number.isFinite(pin.lat) ? `${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}` : `x ${(pin.x ?? 0).toFixed(1)}%, y ${(pin.y ?? 0).toFixed(1)}%`);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'pin-list-remove';
+    removeBtn.setAttribute('aria-label', 'Премахни пин');
+    removeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    removeBtn.addEventListener('click', () => onRemove(idx));
+
+    li.append(badge, label, removeBtn);
+    listEl.appendChild(li);
+  });
 }
 
 function normalizeTagGroups(tags) {
@@ -596,12 +652,14 @@ function toFallbackPin(lat, lng) {
 function initMaps() {
   if (!window.maplibregl) {
     memoryPinPickerEl.addEventListener('click', (event) => {
+      if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
       const rect = memoryPinPickerEl.getBoundingClientRect();
-      appState.draftPin = {
+      appState.draftPins.push({
         x: ((event.clientX - rect.left) / rect.width) * 100,
         y: ((event.clientY - rect.top) / rect.height) * 100,
-      };
-      renderDraftPin();
+        name: '',
+      });
+      renderDraftPins();
     });
     return;
   }
@@ -619,12 +677,13 @@ function initPickerMap() {
     zoom: MAP_CONFIG.zoom,
   });
   pickerMap.on('click', (event) => {
-    appState.draftPin = { lat: event.lngLat.lat, lng: event.lngLat.lng };
-    renderDraftPin();
+    if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+    appState.draftPins.push({ lat: event.lngLat.lat, lng: event.lngLat.lng, name: '' });
+    renderDraftPins();
   });
   pickerMap.on('load', () => {
     renderPickerSavedPins();
-    if (appState.draftPin) renderDraftPin();
+    if (appState.draftPins.length) renderDraftPins();
   });
 }
 
@@ -639,62 +698,60 @@ function initOverviewMap() {
   });
 }
 
-function renderDraftPin() {
+function renderDraftPins() {
+  const pins = appState.draftPins;
+
   if (mapMode === 'maplibre') {
-    if (pickerMarker) {
-      pickerMarker.remove();
-      pickerMarker = null;
+    pickerMarkers.forEach((m) => m.remove());
+    pickerMarkers = [];
+    if (pickerMap) {
+      pins.forEach((pin, idx) => {
+        if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
+        const marker = new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
+          .setLngLat([pin.lng, pin.lat])
+          .addTo(pickerMap);
+        pickerMarkers.push(marker);
+      });
     }
-    if (!appState.draftPin) {
-      memoryPinCoords.textContent = 'Няма избран пин.';
-      return;
-    }
-    if (!pickerMap) {
-      // Map not yet initialised; show coords so user knows the pin is queued
-      memoryPinCoords.innerHTML = `${ICON.pin} ${appState.draftPin.lat.toFixed(5)}, ${appState.draftPin.lng.toFixed(5)}`;
-      return;
-    }
-    pickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
-      .setLngLat([appState.draftPin.lng, appState.draftPin.lat])
-      .addTo(pickerMap);
-    memoryPinCoords.textContent = `Избран пин: ${appState.draftPin.lat.toFixed(5)}, ${appState.draftPin.lng.toFixed(5)}`;
-    return;
+  } else {
+    memoryPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
+    pins.forEach((pin, idx) => {
+      if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
+        addFallbackPin(memoryPinPickerEl, pin.x, pin.y, pin.name || `Пин ${idx + 1}`);
+      }
+    });
   }
 
-  memoryPinPickerEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
-  if (!appState.draftPin) {
-    memoryPinCoords.textContent = 'Няма избран пин.';
-    return;
-  }
-  addFallbackPin(memoryPinPickerEl, appState.draftPin.x, appState.draftPin.y, 'Избран пин');
-  memoryPinCoords.textContent = `Избран пин: x ${appState.draftPin.x.toFixed(1)}%, y ${appState.draftPin.y.toFixed(1)}%`;
+  renderPinListEl(memoryPinListEl, memoryPinCoords, pins, (idx) => {
+    appState.draftPins.splice(idx, 1);
+    renderDraftPins();
+  });
 }
 
 function renderMapPins() {
   mapPinsList.innerHTML = '';
-  const withPins = appState.memories.filter((memory) => memory.pin);
+  const flatPins = appState.memories.flatMap((memory) => memory.pins.map((pin) => ({ memory, pin })));
 
   if (mapMode === 'maplibre') {
     overviewMarkers.forEach((m) => m.remove());
     overviewMarkers = [];
     if (overviewMap) {
-      withPins.forEach((memory) => {
-        if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
-          const marker = new maplibregl.Marker({ color: '#2BB0A0' })
-            .setLngLat([memory.pin.lng, memory.pin.lat])
-            .addTo(overviewMap);
-          marker.getElement().style.cursor = 'pointer';
-          marker.getElement().addEventListener('click', (e) => {
-            e.stopPropagation();
-            openMemoryDetail(memory.createdAt, 'map');
-          });
-          overviewMarkers.push(marker);
-        }
+      flatPins.forEach(({ memory, pin }) => {
+        if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
+        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
+          .setLngLat([pin.lng, pin.lat])
+          .addTo(overviewMap);
+        marker.getElement().style.cursor = 'pointer';
+        marker.getElement().addEventListener('click', (e) => {
+          e.stopPropagation();
+          openMemoryDetail(memory.createdAt, 'map');
+        });
+        overviewMarkers.push(marker);
       });
-      const geoPins = withPins.filter((m) => Number.isFinite(m.pin.lat) && Number.isFinite(m.pin.lng));
+      const geoPins = flatPins.filter(({ pin }) => Number.isFinite(pin.lat) && Number.isFinite(pin.lng));
       if (geoPins.length > 0) {
-        const lngs = geoPins.map((m) => m.pin.lng);
-        const lats = geoPins.map((m) => m.pin.lat);
+        const lngs = geoPins.map(({ pin }) => pin.lng);
+        const lats = geoPins.map(({ pin }) => pin.lat);
         overviewMap.fitBounds(
           [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
           { padding: 60, maxZoom: 11 },
@@ -702,25 +759,25 @@ function renderMapPins() {
       }
     }
   } else {
-    mapBoardEl.querySelectorAll('.fallback-pin').forEach((pin) => pin.remove());
-    withPins.forEach((memory) => {
-      const title = memory.location || memory.text.slice(0, 48);
-      let pin;
-      if (Number.isFinite(memory.pin.x) && Number.isFinite(memory.pin.y)) {
-        pin = addFallbackPin(mapBoardEl, memory.pin.x, memory.pin.y, title);
-      } else if (Number.isFinite(memory.pin.lat) && Number.isFinite(memory.pin.lng)) {
-        const converted = toFallbackPin(memory.pin.lat, memory.pin.lng);
-        pin = addFallbackPin(mapBoardEl, converted.x, converted.y, title);
+    mapBoardEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
+    flatPins.forEach(({ memory, pin }) => {
+      const title = pin.name || memory.location || memory.text.slice(0, 48);
+      let el;
+      if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
+        el = addFallbackPin(mapBoardEl, pin.x, pin.y, title);
+      } else if (Number.isFinite(pin.lat) && Number.isFinite(pin.lng)) {
+        const converted = toFallbackPin(pin.lat, pin.lng);
+        el = addFallbackPin(mapBoardEl, converted.x, converted.y, title);
       }
-      if (pin) {
-        pin.style.cursor = 'pointer';
-        pin.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
+      if (el) {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
       }
     });
   }
 
-  withPins.forEach((memory, index) => {
-    const pinTitle = memory.location || (memory.title || memory.text).slice(0, 48);
+  flatPins.forEach(({ memory, pin }, index) => {
+    const pinTitle = pin.name || memory.location || (memory.title || memory.text).slice(0, 48);
     const li = document.createElement('li');
     li.className = 'memory-item';
     li.style.cursor = 'pointer';
@@ -729,7 +786,7 @@ function renderMapPins() {
     mapPinsList.appendChild(li);
   });
 
-  if (!withPins.length) {
+  if (!flatPins.length) {
     const li = document.createElement('li');
     li.className = 'empty-state';
     li.textContent = 'Все още няма добавени пинове.';
@@ -1010,7 +1067,7 @@ function render() {
   renderPeople();
   renderPersonDetail();
   renderTags();
-  renderDraftPin();
+  renderDraftPins();
   renderMapPins();
   renderPickerSavedPins();
 }
@@ -1108,10 +1165,10 @@ function renderMemoryDetail() {
   }
   setMetaRow(detailLocationEl, ICON.pin, memory.location);
 
-  // Static pin map — actual MapLibre init is deferred until overlay is visible
+  // Static pin/journey map — actual MapLibre init is deferred until overlay is visible
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
-  const pin = memory.pin;
-  if (pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && mapMode === 'maplibre') {
+  const detailGeoPins = (memory.pins || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (detailGeoPins.length && mapMode === 'maplibre') {
     detailStaticMapEl.classList.remove('hidden');
     detailStaticMapEl.innerHTML = '';
   } else {
@@ -1148,46 +1205,93 @@ function initDetailStaticMap() {
   const memory = appState.memories.find((m) => m.createdAt === appState.selectedMemory);
   if (!memory) return;
   if (detailMapInstance) { detailMapInstance.remove(); detailMapInstance = null; }
-  const pin = memory.pin;
-  if (!pin || !Number.isFinite(pin.lat) || !Number.isFinite(pin.lng) || mapMode !== 'maplibre') return;
+  const geoPins = (memory.pins || []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (!geoPins.length || mapMode !== 'maplibre') return;
   detailStaticMapEl.innerHTML = '';
+
+  const center = geoPins.length === 1
+    ? [geoPins[0].lng, geoPins[0].lat]
+    : [
+        geoPins.reduce((sum, p) => sum + p.lng, 0) / geoPins.length,
+        geoPins.reduce((sum, p) => sum + p.lat, 0) / geoPins.length,
+      ];
+
   detailMapInstance = new maplibregl.Map({
     container: detailStaticMapEl,
     style: MAP_CONFIG.styleUrl,
-    center: [pin.lng, pin.lat],
+    center,
     zoom: 13,
     interactive: false,
     attributionControl: false,
   });
-  new maplibregl.Marker({ color: '#2BB0A0' })
-    .setLngLat([pin.lng, pin.lat])
-    .addTo(detailMapInstance);
+
+  detailMapInstance.on('load', () => {
+    if (geoPins.length > 1) {
+      detailMapInstance.addSource('journey-route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: geoPins.map((p) => [p.lng, p.lat]) },
+        },
+      });
+      detailMapInstance.addLayer({
+        id: 'journey-route-line',
+        type: 'line',
+        source: 'journey-route',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#2BB0A0', 'line-width': 2.5, 'line-dasharray': [2, 2] },
+      });
+
+      const bounds = geoPins.reduce(
+        (b, p) => b.extend([p.lng, p.lat]),
+        new maplibregl.LngLatBounds([geoPins[0].lng, geoPins[0].lat], [geoPins[0].lng, geoPins[0].lat]),
+      );
+      detailMapInstance.fitBounds(bounds, { padding: 40, maxZoom: 14 });
+    }
+
+    geoPins.forEach((pin, idx) => {
+      const marker = geoPins.length > 1
+        ? new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
+        : new maplibregl.Marker({ color: '#2BB0A0' });
+      marker.setLngLat([pin.lng, pin.lat]).addTo(detailMapInstance);
+    });
+  });
+
   setTimeout(() => detailMapInstance && detailMapInstance.resize(), 50);
 }
 
-function renderEditPin() {
+function renderEditPins() {
+  const pins = editDraftPins;
+
   if (mapMode === 'maplibre') {
-    if (editPickerMarker) { editPickerMarker.remove(); editPickerMarker = null; }
-    if (editDraftPin) {
-      editPickerMarker = new maplibregl.Marker({ color: '#2BB0A0' })
-        .setLngLat([editDraftPin.lng, editDraftPin.lat])
-        .addTo(editPickerMap);
-      editPinCoords.innerHTML = `${ICON.pin} ${editDraftPin.lat.toFixed(5)}, ${editDraftPin.lng.toFixed(5)}`;
-    } else {
-      editPinCoords.textContent = 'Няма избран пин.';
+    editPickerMarkers.forEach((m) => m.remove());
+    editPickerMarkers = [];
+    if (editPickerMap) {
+      pins.forEach((pin, idx) => {
+        if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
+        const marker = new maplibregl.Marker({ element: createNumberedMarkerEl(idx + 1) })
+          .setLngLat([pin.lng, pin.lat])
+          .addTo(editPickerMap);
+        editPickerMarkers.push(marker);
+      });
     }
   } else {
-    editPinPickerEl.querySelectorAll('.fallback-pin').forEach((p) => p.remove());
-    if (editDraftPin) {
-      addFallbackPin(editPinPickerEl, editDraftPin.x ?? 50, editDraftPin.y ?? 50, 'Пин');
-      editPinCoords.innerHTML = `${ICON.pin} x ${(editDraftPin.x ?? 50).toFixed(1)}%, y ${(editDraftPin.y ?? 50).toFixed(1)}%`;
-    } else {
-      editPinCoords.textContent = 'Няма избран пин.';
-    }
+    editPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
+    pins.forEach((pin, idx) => {
+      if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
+        addFallbackPin(editPinPickerEl, pin.x, pin.y, pin.name || `Пин ${idx + 1}`);
+      }
+    });
   }
+
+  renderPinListEl(editPinListEl, editPinCoords, pins, (idx) => {
+    editDraftPins.splice(idx, 1);
+    renderEditPins();
+  });
 }
 
-function initEditMap(existingPin) {
+function initEditMap(existingPins) {
   if (mapMode === 'maplibre') {
     if (!editPickerMap) {
       editPickerMap = new maplibregl.Map({
@@ -1197,13 +1301,15 @@ function initEditMap(existingPin) {
         zoom: MAP_CONFIG.zoom,
       });
       editPickerMap.on('click', (e) => {
-        editDraftPin = { lat: e.lngLat.lat, lng: e.lngLat.lng };
-        renderEditPin();
+        if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+        editDraftPins.push({ lat: e.lngLat.lat, lng: e.lngLat.lng, name: '' });
+        renderEditPins();
       });
     }
     setTimeout(() => editPickerMap.resize(), 80);
-    if (existingPin?.lat) {
-      editPickerMap.setCenter([existingPin.lng, existingPin.lat]);
+    const firstPin = existingPins && existingPins[0];
+    if (firstPin?.lat) {
+      editPickerMap.setCenter([firstPin.lng, firstPin.lat]);
       editPickerMap.setZoom(13);
     }
     return;
@@ -1212,12 +1318,14 @@ function initEditMap(existingPin) {
       editPinPickerEl.removeEventListener('click', editFallbackClickHandler);
     }
     editFallbackClickHandler = (e) => {
+      if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
       const rect = editPinPickerEl.getBoundingClientRect();
-      editDraftPin = {
+      editDraftPins.push({
         x: ((e.clientX - rect.left) / rect.width) * 100,
         y: ((e.clientY - rect.top) / rect.height) * 100,
-      };
-      renderEditPin();
+        name: '',
+      });
+      renderEditPins();
     };
     editPinPickerEl.addEventListener('click', editFallbackClickHandler);
   }
@@ -1238,8 +1346,8 @@ function enterEditMode() {
   editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
   editNotesArea.value = memory.notes || '';
 
-  // Restore pin from memory
-  editDraftPin = memory.pin ? { ...memory.pin } : null;
+  // Restore pins from memory
+  editDraftPins = (memory.pins || []).map((p) => ({ ...p }));
 
   // Show existing photos with individual delete buttons
   editRemovedPhotoIndices = new Set();
@@ -1281,8 +1389,8 @@ function enterEditMode() {
   memoryDetailEl.scrollTop = 0;
 
   // Init map after becoming visible
-  initEditMap(memory.pin);
-  renderEditPin();
+  initEditMap(memory.pins);
+  renderEditPins();
 }
 
 detailBackBtn.addEventListener('click', closeMemoryDetail);
@@ -1290,8 +1398,8 @@ detailBackBtn.addEventListener('click', closeMemoryDetail);
 detailEditBtn.addEventListener('click', enterEditMode);
 
 editClearPinBtn.addEventListener('click', () => {
-  editDraftPin = null;
-  renderEditPin();
+  editDraftPins = [];
+  renderEditPins();
 });
 
 detailEditCancel.addEventListener('click', () => {
@@ -1337,7 +1445,7 @@ detailEditForm.addEventListener('submit', async (event) => {
     person: newPerson,
     item: newItem,
     notes: newNotes,
-    pin: editDraftPin,
+    pin: editDraftPins.length ? editDraftPins : null,
     tags: newTags,
   }).eq('id', memoryId).eq('user_id', appState.userId);
 
@@ -1388,7 +1496,7 @@ detailEditForm.addEventListener('submit', async (event) => {
       person: newPerson,
       item: newItem,
       notes: newNotes,
-      pin: editDraftPin,
+      pin: editDraftPins.length ? editDraftPins : null,
       tags: newTags,
       memory_media: [...keptPaths, ...uploadedPaths].map((p, i) => ({ storage_path: p, position: i })),
     });
@@ -1440,7 +1548,7 @@ async function importData(file) {
           person: m.persons ? m.persons.join(', ') : (m.person || ''),
           item: m.items ? m.items.join(', ') : (m.item || ''),
           notes: m.notes || '',
-          pin: m.pin || null,
+          pin: m.pins || m.pin || null,
           tags: m.tags || null,
         }).select().single();
 
@@ -1570,7 +1678,7 @@ logoutBtn.addEventListener('click', async () => {
   appState.memories = [];
   appState.people = [];
   appState.activeTag = null;
-  appState.draftPin = null;
+  appState.draftPins = [];
   appState.selectedPerson = null;
   appState.selectedMemory = null;
   appState.loading = false;
@@ -1604,8 +1712,8 @@ timelineSearchClear.addEventListener('click', () => {
 });
 
 clearPinBtn.addEventListener('click', () => {
-  appState.draftPin = null;
-  renderDraftPin();
+  appState.draftPins = [];
+  renderDraftPins();
 });
 
 memoryMediaInput.addEventListener('change', () => {
@@ -1729,7 +1837,7 @@ memoryForm.addEventListener('submit', async (event) => {
     location,
     notes: '',
     tags: { general: generalTags, activity: activityTags, emotion: emotionTags },
-    pin: appState.draftPin || null,
+    pin: appState.draftPins.length ? appState.draftPins : null,
   }).select().single();
 
   if (error) {
@@ -1756,8 +1864,8 @@ memoryForm.addEventListener('submit', async (event) => {
   appState.memories.unshift(mapMemory(fullRow ?? { ...inserted, memory_media: [] }));
 
   appState.activeTag = null;
-  appState.draftPin = null;
-  renderDraftPin();
+  appState.draftPins = [];
+  renderDraftPins();
   render();
   switchTab('create-memory');
   showHomeDashboard();
@@ -1834,12 +1942,14 @@ function getSavedLocations(query) {
   const seen = new Set();
   const results = [];
   for (const m of appState.memories) {
-    if (!m.location || !m.pin || !Number.isFinite(m.pin.lat) || !Number.isFinite(m.pin.lng)) continue;
-    const loc = m.location.trim();
-    if (!loc || seen.has(loc.toLowerCase())) continue;
-    if (loc.toLowerCase().includes(lower)) {
-      seen.add(loc.toLowerCase());
-      results.push({ name: loc, lat: m.pin.lat, lng: m.pin.lng, saved: true });
+    for (const p of m.pins) {
+      if (!p.name || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+      const loc = p.name.trim();
+      if (!loc || seen.has(loc.toLowerCase())) continue;
+      if (loc.toLowerCase().includes(lower)) {
+        seen.add(loc.toLowerCase());
+        results.push({ name: loc, lat: p.lat, lng: p.lng, saved: true });
+      }
     }
   }
   return results;
@@ -1943,22 +2053,23 @@ function renderPickerSavedPins() {
   pickerSavedMarkers.forEach((m) => m.remove());
   pickerSavedMarkers = [];
   appState.memories.forEach((memory) => {
-    if (!memory.pin || !Number.isFinite(memory.pin.lat) || !Number.isFinite(memory.pin.lng)) return;
-    const marker = new maplibregl.Marker({ color: '#888888', scale: 0.7 })
-      .setLngLat([memory.pin.lng, memory.pin.lat])
-      .addTo(pickerMap);
-    const el = marker.getElement();
-    el.style.opacity = '0.5';
-    el.style.cursor = 'pointer';
-    el.title = memory.location || (memory.title || memory.text).slice(0, 40);
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      appState.draftPin = { lat: memory.pin.lat, lng: memory.pin.lng };
-      const locationInput = document.querySelector('#memory-location');
-      if (locationInput && memory.location) locationInput.value = memory.location;
-      renderDraftPin();
+    memory.pins.forEach((pin) => {
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
+      const marker = new maplibregl.Marker({ color: '#888888', scale: 0.7 })
+        .setLngLat([pin.lng, pin.lat])
+        .addTo(pickerMap);
+      const el = marker.getElement();
+      el.style.opacity = '0.5';
+      el.style.cursor = 'pointer';
+      el.title = pin.name || memory.location || (memory.title || memory.text).slice(0, 40);
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+        appState.draftPins.push({ lat: pin.lat, lng: pin.lng, name: pin.name || memory.location || '' });
+        renderDraftPins();
+      });
+      pickerSavedMarkers.push(marker);
     });
-    pickerSavedMarkers.push(marker);
   });
 }
 
@@ -2004,26 +2115,28 @@ function openPhotosOverlay() {
   document.querySelector('#app-screen').appendChild(overlay);
 }
 
-// Wire up location geocoding for the add form
+// Wire up location geocoding for the add form. Selecting a suggestion adds a
+// new named pin (up to MAX_PINS) rather than replacing the whole pin set,
+// since a memory can now have multiple locations.
 attachLocationAutocomplete(
   document.querySelector('#memory-location'),
   (item) => {
-    appState.draftPin = { lat: item.lat, lng: item.lng };
-    renderDraftPin();
+    if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+    appState.draftPins.push({ lat: item.lat, lng: item.lng, name: item.name });
+    renderDraftPins();
     if (pickerMap) pickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
   },
-  () => { appState.draftPin = null; renderDraftPin(); },
 );
 
 // Wire up location geocoding for the edit form
 attachLocationAutocomplete(
   document.querySelector('#edit-location'),
   (item) => {
-    editDraftPin = { lat: item.lat, lng: item.lng };
-    renderEditPin();
+    if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+    editDraftPins.push({ lat: item.lat, lng: item.lng, name: item.name });
+    renderEditPins();
     if (editPickerMap) editPickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
   },
-  () => { editDraftPin = null; renderEditPin(); },
 );
 
 initMaps();
@@ -2123,7 +2236,7 @@ sb.auth.onAuthStateChange((event, session) => {
     appState.memories = [];
     appState.people = [];
     appState.activeTag = null;
-    appState.draftPin = null;
+    appState.draftPins = [];
     appState.selectedPerson = null;
     appState.selectedMemory = null;
     appState.loading = false;
