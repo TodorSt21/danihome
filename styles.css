@@ -652,30 +652,6 @@ button.tiny {
   gap: 8px;
 }
 
-.photo-remove-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 0.65rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  z-index: 1;
-}
-
-.photo-remove-btn:hover {
-  background: rgba(220, 38, 38, 0.85);
-}
-
 .media-preview-item {
   aspect-ratio: 1;
   border: 1px solid var(--border);
@@ -687,8 +663,9 @@ button.tiny {
 /* ── EDIT PHOTO STRIP (drag-to-reorder) ────────────────────────── */
 
 .photo-strip {
+  position: relative;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
@@ -697,12 +674,12 @@ button.tiny {
 .photo-strip-item {
   position: relative;
   flex-shrink: 0;
-  width: 96px;
-  height: 96px;
+  width: 80px;
+  height: 80px;
 }
 
 .photo-strip-item.dragging {
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 .photo-strip-img {
@@ -716,26 +693,55 @@ button.tiny {
 
 .photo-strip-cover-badge {
   position: absolute;
-  bottom: 4px;
-  left: 4px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(43, 176, 160, 0.92);
   color: #fff;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 6px;
-  border-radius: 999px;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 2px 0;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
   pointer-events: none;
   z-index: 1;
 }
 
 .photo-strip-handle {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 22px;
-  height: 22px;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  letter-spacing: -2px;
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.photo-strip-handle:active {
+  cursor: grabbing;
+}
+
+.photo-strip-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: none;
   background: rgba(0, 0, 0, 0.55);
@@ -744,13 +750,60 @@ button.tiny {
   align-items: center;
   justify-content: center;
   padding: 0;
-  cursor: grab;
-  touch-action: none;
-  z-index: 1;
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s;
 }
 
-.photo-strip-handle:active {
-  cursor: grabbing;
+.photo-strip-remove:hover {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+.photo-strip-add {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  border: 2px dashed var(--border);
+  background: transparent;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.photo-strip-add:hover {
+  background: rgba(47, 182, 166, 0.07);
+  border-color: rgba(47, 182, 166, 0.4);
+}
+
+.photo-strip-insertion-line {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  width: 3px;
+  background: #2f80ed;
+  border-radius: 2px;
+  transform: translateX(-1.5px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.photo-strip-ghost {
+  position: fixed;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0.92;
+  transform: scale(1.05);
+  pointer-events: none;
+  z-index: 999;
 }
 
 /* ── FAB ────────────────────────────────────────────────────────── */
