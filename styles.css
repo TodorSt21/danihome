@@ -1233,6 +1233,69 @@ button.tiny {
   margin-top: -4px;
 }
 
+/* ── PER-FIELD LOCATION PICKER ──────────────────────────────────── */
+
+.location-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.location-actions .ghost.tiny:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.location-fields {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.location-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.location-field-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.location-field-input {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.location-field-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+  transition: background 0.15s;
+}
+
+.location-field-remove:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
 @media (min-width: 768px) {
   body {
     display: flex;

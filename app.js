@@ -63,7 +63,6 @@ const detailNotesText = document.querySelector('#detail-notes');
 const detailEditForm = document.querySelector('#detail-edit-form');
 const editTextArea = document.querySelector('#edit-text');
 const editEventDate = document.querySelector('#edit-event-date');
-const editLocation = document.querySelector('#edit-location');
 const editPerson = document.querySelector('#edit-person');
 const editItem = document.querySelector('#edit-item');
 const editTags = document.querySelector('#edit-tags');
@@ -81,7 +80,8 @@ const editClearPinBtn = document.querySelector('#edit-clear-pin');
 
 let editPickerMap;
 let editPickerMarkers = [];
-let editDraftPins = [];
+let editLocationFields = [];
+let editActiveLocationIndex = 0;
 let editRemovedPhotoIndices = new Set();
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
@@ -110,6 +110,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 const MAPTILER_KEY = 'EUCoLY6ma4XHK9Gt2Xxq';
 const MAX_PINS = 5;
+const LOCATION_COLORS = ['#2BB0A0', '#F5A623', '#E8604C', '#9B6BCE', '#4A90D9'];
 
 const DEFAULT_MAP_CONFIG = {
   center: [42.6977, 23.3219], // [lat, lng]
@@ -122,13 +123,18 @@ const MAP_CONFIG = {
   ...(window.APP_MAP_CONFIG || {}),
 };
 
+function emptyLocationField() {
+  return { name: '', lat: null, lng: null, x: null, y: null };
+}
+
 let appState = {
   user: null,
   userId: null,
   memories: [],
   people: [],
   activeTag: null,
-  draftPins: [],
+  locationFields: [emptyLocationField()],
+  activeLocationIndex: 0,
   selectedPerson: null,
   selectedMemory: null,
   loading: false,
@@ -141,8 +147,26 @@ let overviewMap;
 let overviewMarkers = [];
 let pickerSavedMarkers = [];
 
-const memoryPinListEl = document.querySelector('#memory-pin-list');
-const editPinListEl = document.querySelector('#edit-pin-list');
+const memoryLocationsEl = document.querySelector('#memory-locations');
+const memoryAddLocationBtn = document.querySelector('#memory-add-location');
+const editLocationsEl = document.querySelector('#edit-locations');
+const editAddLocationBtn = document.querySelector('#edit-add-location');
+
+function clampIndex(list, idx) {
+  if (!list.length) return 0;
+  return Math.max(0, Math.min(idx, list.length - 1));
+}
+
+function pinFromField(field) {
+  if (!field) return null;
+  if (Number.isFinite(field.lat) && Number.isFinite(field.lng)) {
+    return { lat: field.lat, lng: field.lng, name: (field.name || '').trim() };
+  }
+  if (Number.isFinite(field.x) && Number.isFinite(field.y)) {
+    return { x: field.x, y: field.y, name: (field.name || '').trim() };
+  }
+  return null;
+}
 
 // --- Supabase helpers ---
 
@@ -652,14 +676,15 @@ function toFallbackPin(lat, lng) {
 function initMaps() {
   if (!window.maplibregl) {
     memoryPinPickerEl.addEventListener('click', (event) => {
-      if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+      if (!appState.locationFields.length) { showToast('Добавете място, преди да поставите пин.'); return; }
+      const idx = clampIndex(appState.locationFields, appState.activeLocationIndex);
+      const field = appState.locationFields[idx];
       const rect = memoryPinPickerEl.getBoundingClientRect();
-      appState.draftPins.push({
-        x: ((event.clientX - rect.left) / rect.width) * 100,
-        y: ((event.clientY - rect.top) / rect.height) * 100,
-        name: '',
-      });
-      renderDraftPins();
+      field.x = ((event.clientX - rect.left) / rect.width) * 100;
+      field.y = ((event.clientY - rect.top) / rect.height) * 100;
+      field.lat = null;
+      field.lng = null;
+      renderLocationPins();
     });
     return;
   }
@@ -677,13 +702,18 @@ function initPickerMap() {
     zoom: MAP_CONFIG.zoom,
   });
   pickerMap.on('click', (event) => {
-    if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
-    appState.draftPins.push({ lat: event.lngLat.lat, lng: event.lngLat.lng, name: '' });
-    renderDraftPins();
+    if (!appState.locationFields.length) { showToast('Добавете място, преди да поставите пин.'); return; }
+    const idx = clampIndex(appState.locationFields, appState.activeLocationIndex);
+    const field = appState.locationFields[idx];
+    field.lat = event.lngLat.lat;
+    field.lng = event.lngLat.lng;
+    if (!field.name) field.name = `${field.lat.toFixed(4)}, ${field.lng.toFixed(4)}`;
+    renderLocationPins();
+    syncLocationFieldInput(idx);
   });
   pickerMap.on('load', () => {
     renderPickerSavedPins();
-    if (appState.draftPins.length) renderDraftPins();
+    renderLocationPins();
   });
 }
 
@@ -698,34 +728,96 @@ function initOverviewMap() {
   });
 }
 
-function renderDraftPins() {
-  const pins = appState.draftPins;
+function syncLocationFieldInput(idx) {
+  const input = memoryLocationsEl?.querySelector(`.location-field[data-index="${idx}"] .location-field-input`);
+  if (input) input.value = appState.locationFields[idx].name;
+}
+
+// Rebuilds the location field rows (text input + swatch + remove button) in
+// the add form. Only called on structural changes (add/remove field, form
+// reset) — never from the global render() — so it never wipes text the user
+// is mid-typing during an incidental re-render.
+function renderLocationFields() {
+  if (!memoryLocationsEl) return;
+  memoryLocationsEl.innerHTML = '';
+  appState.locationFields.forEach((field, idx) => {
+    const row = document.createElement('div');
+    row.className = 'location-field';
+    row.dataset.index = idx;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'location-field-swatch';
+    swatch.style.background = LOCATION_COLORS[idx % LOCATION_COLORS.length];
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'location-field-input';
+    input.placeholder = 'Напр. Аспарухов плаж';
+    input.value = field.name;
+    input.addEventListener('input', () => { field.name = input.value; });
+    input.addEventListener('focus', () => { appState.activeLocationIndex = idx; });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'location-field-remove';
+    removeBtn.setAttribute('aria-label', 'Премахни място');
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      appState.locationFields.splice(idx, 1);
+      appState.activeLocationIndex = clampIndex(appState.locationFields, appState.activeLocationIndex);
+      renderLocationFields();
+      renderLocationPins();
+    });
+
+    row.append(swatch, input, removeBtn);
+    memoryLocationsEl.appendChild(row);
+
+    attachLocationAutocomplete(input, (item) => {
+      field.name = item.name;
+      field.lat = item.lat;
+      field.lng = item.lng;
+      field.x = null;
+      field.y = null;
+      appState.activeLocationIndex = idx;
+      renderLocationPins();
+      if (pickerMap) pickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
+    });
+  });
+
+  if (memoryAddLocationBtn) memoryAddLocationBtn.disabled = appState.locationFields.length >= MAX_PINS;
+}
+
+// Updates only the map markers + hint text from appState.locationFields.
+// Safe to call from the global render() since it never touches the field
+// <input> elements (which would blow away in-progress typing).
+function renderLocationPins() {
+  const fields = appState.locationFields;
 
   if (mapMode === 'maplibre') {
     pickerMarkers.forEach((m) => m.remove());
     pickerMarkers = [];
     if (pickerMap) {
-      pins.forEach((pin) => {
-        if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
-        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
-          .setLngLat([pin.lng, pin.lat])
+      fields.forEach((field, idx) => {
+        if (!Number.isFinite(field.lat) || !Number.isFinite(field.lng)) return;
+        const marker = new maplibregl.Marker({ color: LOCATION_COLORS[idx % LOCATION_COLORS.length] })
+          .setLngLat([field.lng, field.lat])
           .addTo(pickerMap);
         pickerMarkers.push(marker);
       });
     }
   } else {
     memoryPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
-    pins.forEach((pin, idx) => {
-      if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
-        addFallbackPin(memoryPinPickerEl, pin.x, pin.y, pin.name || `Локация ${idx + 1}`);
+    fields.forEach((field, idx) => {
+      if (Number.isFinite(field.x) && Number.isFinite(field.y)) {
+        addFallbackPin(memoryPinPickerEl, field.x, field.y, field.name || `Място ${idx + 1}`);
       }
     });
   }
 
-  renderPinChips(memoryPinListEl, memoryPinCoords, pins, (idx) => {
-    appState.draftPins.splice(idx, 1);
-    renderDraftPins();
-  });
+  const withCoords = fields.filter((f) => pinFromField(f)).length;
+  memoryPinCoords.textContent = fields.length
+    ? `${withCoords} от ${fields.length} ${fields.length === 1 ? 'място има' : 'места имат'} отбелязан пин.`
+    : 'Няма избрани места.';
 }
 
 function renderMapPins() {
@@ -1067,7 +1159,7 @@ function render() {
   renderPeople();
   renderPersonDetail();
   renderTags();
-  renderDraftPins();
+  renderLocationPins();
   renderMapPins();
   renderPickerSavedPins();
 }
@@ -1251,37 +1343,92 @@ function initDetailStaticMap() {
   setTimeout(() => detailMapInstance && detailMapInstance.resize(), 50);
 }
 
-function renderEditPins() {
-  const pins = editDraftPins;
+function syncEditLocationFieldInput(idx) {
+  const input = editLocationsEl?.querySelector(`.location-field[data-index="${idx}"] .location-field-input`);
+  if (input) input.value = editLocationFields[idx].name;
+}
+
+function renderEditLocationFields() {
+  if (!editLocationsEl) return;
+  editLocationsEl.innerHTML = '';
+  editLocationFields.forEach((field, idx) => {
+    const row = document.createElement('div');
+    row.className = 'location-field';
+    row.dataset.index = idx;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'location-field-swatch';
+    swatch.style.background = LOCATION_COLORS[idx % LOCATION_COLORS.length];
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'location-field-input';
+    input.placeholder = 'Напр. Аспарухов плаж';
+    input.value = field.name;
+    input.addEventListener('input', () => { field.name = input.value; });
+    input.addEventListener('focus', () => { editActiveLocationIndex = idx; });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'location-field-remove';
+    removeBtn.setAttribute('aria-label', 'Премахни място');
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      editLocationFields.splice(idx, 1);
+      editActiveLocationIndex = clampIndex(editLocationFields, editActiveLocationIndex);
+      renderEditLocationFields();
+      renderEditLocationPins();
+    });
+
+    row.append(swatch, input, removeBtn);
+    editLocationsEl.appendChild(row);
+
+    attachLocationAutocomplete(input, (item) => {
+      field.name = item.name;
+      field.lat = item.lat;
+      field.lng = item.lng;
+      field.x = null;
+      field.y = null;
+      editActiveLocationIndex = idx;
+      renderEditLocationPins();
+      if (editPickerMap) editPickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
+    });
+  });
+
+  if (editAddLocationBtn) editAddLocationBtn.disabled = editLocationFields.length >= MAX_PINS;
+}
+
+function renderEditLocationPins() {
+  const fields = editLocationFields;
 
   if (mapMode === 'maplibre') {
     editPickerMarkers.forEach((m) => m.remove());
     editPickerMarkers = [];
     if (editPickerMap) {
-      pins.forEach((pin) => {
-        if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
-        const marker = new maplibregl.Marker({ color: '#2BB0A0' })
-          .setLngLat([pin.lng, pin.lat])
+      fields.forEach((field, idx) => {
+        if (!Number.isFinite(field.lat) || !Number.isFinite(field.lng)) return;
+        const marker = new maplibregl.Marker({ color: LOCATION_COLORS[idx % LOCATION_COLORS.length] })
+          .setLngLat([field.lng, field.lat])
           .addTo(editPickerMap);
         editPickerMarkers.push(marker);
       });
     }
   } else {
     editPinPickerEl.querySelectorAll('.fallback-pin').forEach((el) => el.remove());
-    pins.forEach((pin, idx) => {
-      if (Number.isFinite(pin.x) && Number.isFinite(pin.y)) {
-        addFallbackPin(editPinPickerEl, pin.x, pin.y, pin.name || `Локация ${idx + 1}`);
+    fields.forEach((field, idx) => {
+      if (Number.isFinite(field.x) && Number.isFinite(field.y)) {
+        addFallbackPin(editPinPickerEl, field.x, field.y, field.name || `Място ${idx + 1}`);
       }
     });
   }
 
-  renderPinChips(editPinListEl, editPinCoords, pins, (idx) => {
-    editDraftPins.splice(idx, 1);
-    renderEditPins();
-  });
+  const withCoords = fields.filter((f) => pinFromField(f)).length;
+  editPinCoords.textContent = fields.length
+    ? `${withCoords} от ${fields.length} ${fields.length === 1 ? 'място има' : 'места имат'} отбелязан пин.`
+    : 'Няма избрани места.';
 }
 
-function initEditMap(existingPins) {
+function initEditMap(existingFields) {
   if (mapMode === 'maplibre') {
     if (!editPickerMap) {
       editPickerMap = new maplibregl.Map({
@@ -1291,15 +1438,20 @@ function initEditMap(existingPins) {
         zoom: MAP_CONFIG.zoom,
       });
       editPickerMap.on('click', (e) => {
-        if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
-        editDraftPins.push({ lat: e.lngLat.lat, lng: e.lngLat.lng, name: '' });
-        renderEditPins();
+        if (!editLocationFields.length) { showToast('Добавете място, преди да поставите пин.'); return; }
+        const idx = clampIndex(editLocationFields, editActiveLocationIndex);
+        const field = editLocationFields[idx];
+        field.lat = e.lngLat.lat;
+        field.lng = e.lngLat.lng;
+        if (!field.name) field.name = `${field.lat.toFixed(4)}, ${field.lng.toFixed(4)}`;
+        renderEditLocationPins();
+        syncEditLocationFieldInput(idx);
       });
     }
     setTimeout(() => editPickerMap.resize(), 80);
-    const firstPin = existingPins && existingPins[0];
-    if (firstPin?.lat) {
-      editPickerMap.setCenter([firstPin.lng, firstPin.lat]);
+    const firstGeoField = existingFields && existingFields.find((f) => Number.isFinite(f.lat));
+    if (firstGeoField) {
+      editPickerMap.setCenter([firstGeoField.lng, firstGeoField.lat]);
       editPickerMap.setZoom(13);
     }
     return;
@@ -1308,14 +1460,15 @@ function initEditMap(existingPins) {
       editPinPickerEl.removeEventListener('click', editFallbackClickHandler);
     }
     editFallbackClickHandler = (e) => {
-      if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
+      if (!editLocationFields.length) { showToast('Добавете място, преди да поставите пин.'); return; }
+      const idx = clampIndex(editLocationFields, editActiveLocationIndex);
+      const field = editLocationFields[idx];
       const rect = editPinPickerEl.getBoundingClientRect();
-      editDraftPins.push({
-        x: ((e.clientX - rect.left) / rect.width) * 100,
-        y: ((e.clientY - rect.top) / rect.height) * 100,
-        name: '',
-      });
-      renderEditPins();
+      field.x = ((e.clientX - rect.left) / rect.width) * 100;
+      field.y = ((e.clientY - rect.top) / rect.height) * 100;
+      field.lat = null;
+      field.lng = null;
+      renderEditLocationPins();
     };
     editPinPickerEl.addEventListener('click', editFallbackClickHandler);
   }
@@ -1328,7 +1481,6 @@ function enterEditMode() {
   if (editTitleInput) editTitleInput.value = memory.title || '';
   editTextArea.value = memory.text;
   editEventDate.value = memory.eventDate ? memory.eventDate.slice(0, 10) : '';
-  editLocation.value = memory.location || '';
   editPerson.value = memory.persons.join(', ');
   editItem.value = memory.items.join(', ');
   editTags.value = (memory.tags?.general || []).join(', ');
@@ -1336,8 +1488,18 @@ function enterEditMode() {
   editEmotionTags.value = (memory.tags?.emotion || []).join(', ');
   editNotesArea.value = memory.notes || '';
 
-  // Restore pins from memory
-  editDraftPins = (memory.pins || []).map((p) => ({ ...p }));
+  // Restore location fields from memory.pins
+  editLocationFields = (memory.pins && memory.pins.length)
+    ? memory.pins.map((p) => ({
+        name: p.name || '',
+        lat: Number.isFinite(p.lat) ? p.lat : null,
+        lng: Number.isFinite(p.lng) ? p.lng : null,
+        x: Number.isFinite(p.x) ? p.x : null,
+        y: Number.isFinite(p.y) ? p.y : null,
+      }))
+    : [emptyLocationField()];
+  editActiveLocationIndex = 0;
+  renderEditLocationFields();
 
   // Show existing photos with individual delete buttons
   editRemovedPhotoIndices = new Set();
@@ -1379,8 +1541,8 @@ function enterEditMode() {
   memoryDetailEl.scrollTop = 0;
 
   // Init map after becoming visible
-  initEditMap(memory.pins);
-  renderEditPins();
+  initEditMap(editLocationFields);
+  renderEditLocationPins();
 }
 
 detailBackBtn.addEventListener('click', closeMemoryDetail);
@@ -1388,9 +1550,20 @@ detailBackBtn.addEventListener('click', closeMemoryDetail);
 detailEditBtn.addEventListener('click', enterEditMode);
 
 editClearPinBtn.addEventListener('click', () => {
-  editDraftPins = [];
-  renderEditPins();
+  editLocationFields = [emptyLocationField()];
+  editActiveLocationIndex = 0;
+  renderEditLocationFields();
+  renderEditLocationPins();
 });
+
+if (editAddLocationBtn) {
+  editAddLocationBtn.addEventListener('click', () => {
+    if (editLocationFields.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} места на спомен.`); return; }
+    editLocationFields.push(emptyLocationField());
+    editActiveLocationIndex = editLocationFields.length - 1;
+    renderEditLocationFields();
+  });
+}
 
 detailEditCancel.addEventListener('click', () => {
   detailView.classList.remove('hidden');
@@ -1416,7 +1589,8 @@ detailEditForm.addEventListener('submit', async (event) => {
   const newTitle = (editTitleInput ? editTitleInput.value.trim() : '') || memory.title || memory.text;
   const newText = editTextArea.value.trim();
   const newEventDate = editEventDate.value || memory.eventDate;
-  const newLocation = editLocation.value.trim();
+  const editPinsForSave = editLocationFields.map(pinFromField).filter(Boolean);
+  const newLocation = editLocationFields.map((f) => (f.name || '').trim()).filter(Boolean).join(', ');
   const newPerson = editPerson.value.trim();
   const newItem = editItem.value.trim();
   const newNotes = editNotesArea.value.trim();
@@ -1435,7 +1609,7 @@ detailEditForm.addEventListener('submit', async (event) => {
     person: newPerson,
     item: newItem,
     notes: newNotes,
-    pin: editDraftPins.length ? editDraftPins : null,
+    pin: editPinsForSave.length ? editPinsForSave : null,
     tags: newTags,
   }).eq('id', memoryId).eq('user_id', appState.userId);
 
@@ -1486,7 +1660,7 @@ detailEditForm.addEventListener('submit', async (event) => {
       person: newPerson,
       item: newItem,
       notes: newNotes,
-      pin: editDraftPins.length ? editDraftPins : null,
+      pin: editPinsForSave.length ? editPinsForSave : null,
       tags: newTags,
       memory_media: [...keptPaths, ...uploadedPaths].map((p, i) => ({ storage_path: p, position: i })),
     });
@@ -1668,7 +1842,9 @@ logoutBtn.addEventListener('click', async () => {
   appState.memories = [];
   appState.people = [];
   appState.activeTag = null;
-  appState.draftPins = [];
+  appState.locationFields = [emptyLocationField()];
+  appState.activeLocationIndex = 0;
+  renderLocationFields();
   appState.selectedPerson = null;
   appState.selectedMemory = null;
   appState.loading = false;
@@ -1702,9 +1878,20 @@ timelineSearchClear.addEventListener('click', () => {
 });
 
 clearPinBtn.addEventListener('click', () => {
-  appState.draftPins = [];
-  renderDraftPins();
+  appState.locationFields = [emptyLocationField()];
+  appState.activeLocationIndex = 0;
+  renderLocationFields();
+  renderLocationPins();
 });
+
+if (memoryAddLocationBtn) {
+  memoryAddLocationBtn.addEventListener('click', () => {
+    if (appState.locationFields.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} места на спомен.`); return; }
+    appState.locationFields.push(emptyLocationField());
+    appState.activeLocationIndex = appState.locationFields.length - 1;
+    renderLocationFields();
+  });
+}
 
 memoryMediaInput.addEventListener('change', () => {
   renderMediaPreview();
@@ -1807,7 +1994,8 @@ memoryForm.addEventListener('submit', async (event) => {
   const eventDateInput = document.querySelector('#memory-event-date').value;
   const item = document.querySelector('#memory-item').value.trim();
   const person = document.querySelector('#memory-person').value.trim();
-  const location = document.querySelector('#memory-location').value.trim();
+  const locationPinsForSave = appState.locationFields.map(pinFromField).filter(Boolean);
+  const location = appState.locationFields.map((f) => (f.name || '').trim()).filter(Boolean).join(', ');
   const generalTags = parseTagInput(document.querySelector('#memory-tags').value);
   const activityTags = parseTagInput(document.querySelector('#memory-activity-tags').value);
   const emotionTags = parseTagInput(document.querySelector('#memory-emotion-tags').value);
@@ -1827,7 +2015,7 @@ memoryForm.addEventListener('submit', async (event) => {
     location,
     notes: '',
     tags: { general: generalTags, activity: activityTags, emotion: emotionTags },
-    pin: appState.draftPins.length ? appState.draftPins : null,
+    pin: locationPinsForSave.length ? locationPinsForSave : null,
   }).select().single();
 
   if (error) {
@@ -1854,8 +2042,10 @@ memoryForm.addEventListener('submit', async (event) => {
   appState.memories.unshift(mapMemory(fullRow ?? { ...inserted, memory_media: [] }));
 
   appState.activeTag = null;
-  appState.draftPins = [];
-  renderDraftPins();
+  appState.locationFields = [emptyLocationField()];
+  appState.activeLocationIndex = 0;
+  renderLocationFields();
+  renderLocationPins();
   render();
   switchTab('create-memory');
   showHomeDashboard();
@@ -2045,18 +2235,25 @@ function renderPickerSavedPins() {
   appState.memories.forEach((memory) => {
     memory.pins.forEach((pin) => {
       if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return;
-      const marker = new maplibregl.Marker({ color: '#888888', scale: 0.7 })
+      const marker = new maplibregl.Marker({ color: '#888888', scale: 0.55 })
         .setLngLat([pin.lng, pin.lat])
         .addTo(pickerMap);
       const el = marker.getElement();
-      el.style.opacity = '0.5';
+      el.style.opacity = '0.4';
       el.style.cursor = 'pointer';
       el.title = pin.name || memory.location || (memory.title || memory.text).slice(0, 40);
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
-        appState.draftPins.push({ lat: pin.lat, lng: pin.lng, name: pin.name || memory.location || '' });
-        renderDraftPins();
+        if (!appState.locationFields.length) { showToast('Добавете място, преди да изберете локация.'); return; }
+        const idx = clampIndex(appState.locationFields, appState.activeLocationIndex);
+        const field = appState.locationFields[idx];
+        field.lat = pin.lat;
+        field.lng = pin.lng;
+        field.x = null;
+        field.y = null;
+        field.name = pin.name || memory.location || field.name;
+        renderLocationPins();
+        syncLocationFieldInput(idx);
       });
       pickerSavedMarkers.push(marker);
     });
@@ -2105,30 +2302,10 @@ function openPhotosOverlay() {
   document.querySelector('#app-screen').appendChild(overlay);
 }
 
-// Wire up location geocoding for the add form. Selecting a suggestion adds a
-// new named pin (up to MAX_PINS) rather than replacing the whole pin set,
-// since a memory can now have multiple locations.
-attachLocationAutocomplete(
-  document.querySelector('#memory-location'),
-  (item) => {
-    if (appState.draftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
-    appState.draftPins.push({ lat: item.lat, lng: item.lng, name: item.name });
-    renderDraftPins();
-    if (pickerMap) pickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
-  },
-);
+// Each location field gets its own geocoding autocomplete, attached when its
+// row is created in renderLocationFields()/renderEditLocationFields().
 
-// Wire up location geocoding for the edit form
-attachLocationAutocomplete(
-  document.querySelector('#edit-location'),
-  (item) => {
-    if (editDraftPins.length >= MAX_PINS) { showToast(`Максимум ${MAX_PINS} пина на спомен.`); return; }
-    editDraftPins.push({ lat: item.lat, lng: item.lng, name: item.name });
-    renderEditPins();
-    if (editPickerMap) editPickerMap.flyTo({ center: [item.lng, item.lat], zoom: 13 });
-  },
-);
-
+renderLocationFields();
 initMaps();
 switchTab('create-memory');
 document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
@@ -2226,7 +2403,9 @@ sb.auth.onAuthStateChange((event, session) => {
     appState.memories = [];
     appState.people = [];
     appState.activeTag = null;
-    appState.draftPins = [];
+    appState.locationFields = [emptyLocationField()];
+    appState.activeLocationIndex = 0;
+    renderLocationFields();
     appState.selectedPerson = null;
     appState.selectedMemory = null;
     appState.loading = false;

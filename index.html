@@ -173,11 +173,6 @@
                 </label>
 
                 <label>
-                  Локация <span class="field-hint">(опционално)</span>
-                  <input type="text" id="memory-location" placeholder="Напр. София, НДК" />
-                </label>
-
-                <label>
                   Тагове <span class="field-hint">(разделени със запетая)</span>
                   <input type="text" id="memory-tags" placeholder="Напр. пътуване, семейство" />
                 </label>
@@ -194,12 +189,15 @@
 
                 <div class="map-picker-wrap">
                   <div class="card-heading-with-action">
-                    <strong class="field-label">Посетени места <span class="field-hint">(до 5, опционално)</span></strong>
-                    <button type="button" id="clear-pin" class="ghost tiny">Изчисти всички</button>
+                    <strong class="field-label">Места <span class="field-hint">(до 5, опционално)</span></strong>
+                    <div class="location-actions">
+                      <button type="button" id="memory-add-location" class="ghost tiny">+ Добави място</button>
+                      <button type="button" id="clear-pin" class="ghost tiny">Изчисти</button>
+                    </div>
                   </div>
+                  <div id="memory-locations" class="location-fields"></div>
                   <div id="memory-pin-picker" class="map-board" aria-label="Избери локации"></div>
-                  <small id="memory-pin-coords" class="hint">Няма избрани локации.</small>
-                  <ul id="memory-pin-list" class="pin-list"></ul>
+                  <small id="memory-pin-coords" class="hint">Няма избрани места.</small>
                 </div>
 
                 <label>
@@ -344,19 +342,17 @@
                 <input type="date" id="edit-event-date" />
               </label>
 
-              <label>
-                Локация <span class="field-hint">(текст)</span>
-                <input type="text" id="edit-location" placeholder="Напр. София, НДК" />
-              </label>
-
               <div class="map-picker-wrap">
                 <div class="card-heading-with-action">
-                  <strong class="field-label">Посетени места <span class="field-hint">(до 5, кликни за добавяне)</span></strong>
-                  <button type="button" id="edit-clear-pin" class="ghost tiny">Изчисти всички</button>
+                  <strong class="field-label">Места <span class="field-hint">(до 5, кликни за добавяне)</span></strong>
+                  <div class="location-actions">
+                    <button type="button" id="edit-add-location" class="ghost tiny">+ Добави място</button>
+                    <button type="button" id="edit-clear-pin" class="ghost tiny">Изчисти</button>
+                  </div>
                 </div>
+                <div id="edit-locations" class="location-fields"></div>
                 <div id="edit-pin-picker" class="map-board" aria-label="Избери локации"></div>
-                <small id="edit-pin-coords" class="hint">Няма избрани локации.</small>
-                <ul id="edit-pin-list" class="pin-list"></ul>
+                <small id="edit-pin-coords" class="hint">Няма избрани места.</small>
               </div>
 
               <label>
