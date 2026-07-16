@@ -82,7 +82,6 @@ let editPickerMarkers = [];
 let editLocationFields = [];
 let editActiveLocationIndex = 0;
 let editPhotoItems = [];
-let editPhotoDrag = null;
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
 let pendingTokenRefresh = false;
@@ -1481,13 +1480,13 @@ function revokeEditPhotoBlobUrls() {
 }
 
 // Renders existing + newly-added photos in the original 3-column preview
-// grid (unchanged from the pre-reorder design). The only visual addition is
-// a small ⋮⋮ drag handle per thumbnail, alongside the original ✕ remove
+// grid. Each thumbnail has a ⠿ drag handle plus the original ✕ remove
 // button; item 0 gets a subtle "Корица" (cover) badge since it becomes the
-// timeline card cover image. Reordering uses Pointer Events (not native
-// HTML5 drag-and-drop) so the same code path works for mouse and
-// touch/mobile drags: dragging dims the thumbnail in place and swaps it into
-// position as the pointer crosses a neighboring thumbnail.
+// timeline card cover image. Reordering is handled by SortableJS
+// (initEditPhotoSortable), which works reliably on both mouse and
+// touch/mobile — re-rendering here just rebuilds the DOM from
+// editPhotoItems; it doesn't touch the Sortable instance itself, which
+// stays bound to the (unchanged) #edit-photo-strip container.
 function renderEditPhotoStrip() {
   if (!editPhotoStripEl) return;
   editPhotoStripEl.innerHTML = '';
@@ -1501,7 +1500,6 @@ function renderEditPhotoStrip() {
     const wrap = document.createElement('div');
     wrap.className = 'photo-thumb-wrap';
     wrap.dataset.index = idx;
-    if (editPhotoDrag && editPhotoDrag.fromIndex === idx) wrap.classList.add('dragging');
 
     const img = document.createElement('img');
     img.className = 'media-preview-item';
@@ -1510,12 +1508,10 @@ function renderEditPhotoStrip() {
     img.draggable = false;
     wrap.appendChild(img);
 
-    const handle = document.createElement('button');
-    handle.type = 'button';
-    handle.className = 'photo-drag-handle';
+    const handle = document.createElement('span');
+    handle.className = 'photo-drag-handle drag-handle';
     handle.setAttribute('aria-label', 'Премести снимка');
-    handle.textContent = '⋮⋮';
-    handle.addEventListener('pointerdown', (e) => startPhotoDrag(idx, e));
+    handle.textContent = '⠿';
     wrap.appendChild(handle);
 
     const removeBtn = document.createElement('button');
@@ -1525,7 +1521,8 @@ function renderEditPhotoStrip() {
     removeBtn.setAttribute('aria-label', 'Изтрий снимка');
     removeBtn.addEventListener('click', () => {
       if (!confirm('Изтрий тази снимка?')) return;
-      const [removed] = editPhotoItems.splice(idx, 1);
+      const idxNow = Number(wrap.dataset.index);
+      const [removed] = editPhotoItems.splice(idxNow, 1);
       if (removed?.type === 'new' && removed.url) URL.revokeObjectURL(removed.url);
       renderEditPhotoStrip();
     });
@@ -1542,33 +1539,29 @@ function renderEditPhotoStrip() {
   });
 }
 
-function startPhotoDrag(index, event) {
-  event.preventDefault();
-  editPhotoDrag = { fromIndex: index };
-  renderEditPhotoStrip();
-  document.addEventListener('pointermove', onPhotoDragMove);
-  document.addEventListener('pointerup', onPhotoDragEnd);
-}
+// SortableJS instance for the edit-photo strip. Bound once per edit session
+// (enterEditMode) to the strip container; the container element itself
+// never changes across re-renders, so the same instance keeps working even
+// though renderEditPhotoStrip() rebuilds its children.
+let editPhotoSortable = null;
 
-function onPhotoDragMove(event) {
-  if (!editPhotoDrag) return;
-  const el = document.elementFromPoint(event.clientX, event.clientY);
-  const itemEl = el?.closest('.photo-thumb-wrap');
-  if (!itemEl) return;
-  const overIndex = Number(itemEl.dataset.index);
-  if (Number.isFinite(overIndex) && overIndex !== editPhotoDrag.fromIndex) {
-    const [moved] = editPhotoItems.splice(editPhotoDrag.fromIndex, 1);
-    editPhotoItems.splice(overIndex, 0, moved);
-    editPhotoDrag.fromIndex = overIndex;
-    renderEditPhotoStrip();
+function initEditPhotoSortable() {
+  if (typeof Sortable === 'undefined' || !editPhotoStripEl) return;
+  if (editPhotoSortable) {
+    editPhotoSortable.destroy();
+    editPhotoSortable = null;
   }
-}
-
-function onPhotoDragEnd() {
-  editPhotoDrag = null;
-  document.removeEventListener('pointermove', onPhotoDragMove);
-  document.removeEventListener('pointerup', onPhotoDragEnd);
-  renderEditPhotoStrip();
+  editPhotoSortable = Sortable.create(editPhotoStripEl, {
+    animation: 150,
+    handle: '.drag-handle',
+    ghostClass: 'photo-ghost',
+    onEnd: (evt) => {
+      if (evt.oldIndex === evt.newIndex || evt.oldIndex == null || evt.newIndex == null) return;
+      const [moved] = editPhotoItems.splice(evt.oldIndex, 1);
+      editPhotoItems.splice(evt.newIndex, 0, moved);
+      renderEditPhotoStrip();
+    },
+  });
 }
 
 function enterEditMode() {
@@ -1600,15 +1593,15 @@ function enterEditMode() {
 
   // Build the photo strip from existing photos, in their saved order.
   // New files added via the file input get appended and can be dragged
-  // to any position (handled by renderEditPhotoStrip/startPhotoDrag).
+  // to any position (reordering handled by SortableJS, see initEditPhotoSortable).
   revokeEditPhotoBlobUrls();
   editPhotoItems = (memory.mediaPaths || []).map((path, i) => ({
     type: 'existing',
     path,
     url: memory.mediaDataUrls[i],
   }));
-  editPhotoDrag = null;
   renderEditPhotoStrip();
+  initEditPhotoSortable();
   editMediaInput.value = '';
 
   detailView.classList.add('hidden');
