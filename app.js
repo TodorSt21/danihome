@@ -82,6 +82,7 @@ let editPickerMarkers = [];
 let editLocationFields = [];
 let editActiveLocationIndex = 0;
 let editPhotoItems = [];
+let editCoverIndex = 0;
 let editFallbackClickHandler = null;
 let dataLoadInProgress = false;
 let pendingTokenRefresh = false;
@@ -1480,13 +1481,11 @@ function revokeEditPhotoBlobUrls() {
 }
 
 // Renders existing + newly-added photos in the original 3-column preview
-// grid. Each thumbnail has a ⠿ drag handle plus the original ✕ remove
-// button; item 0 gets a subtle "Корица" (cover) badge since it becomes the
-// timeline card cover image. Reordering is handled by SortableJS
-// (initEditPhotoSortable), which works reliably on both mouse and
-// touch/mobile — re-rendering here just rebuilds the DOM from
-// editPhotoItems; it doesn't touch the Sortable instance itself, which
-// stays bound to the (unchanged) #edit-photo-strip container.
+// grid. Each thumbnail has the original ✕ remove button plus a "Корица"
+// radio button below it; whichever photo's radio is selected becomes
+// position 0 (the timeline card cover) on save — editPhotoItems itself
+// keeps its natural order (existing photos in saved order, new photos
+// appended), only editCoverIndex determines which one is the cover.
 function renderEditPhotoStrip() {
   if (!editPhotoStripEl) return;
   editPhotoStripEl.innerHTML = '';
@@ -1503,16 +1502,18 @@ function renderEditPhotoStrip() {
 
     const img = document.createElement('img');
     img.className = 'media-preview-item';
+    if (idx === editCoverIndex) img.classList.add('is-cover');
     img.src = item.url;
     img.alt = '';
     img.draggable = false;
     wrap.appendChild(img);
 
-    const handle = document.createElement('span');
-    handle.className = 'photo-drag-handle drag-handle';
-    handle.setAttribute('aria-label', 'Премести снимка');
-    handle.textContent = '⠿';
-    wrap.appendChild(handle);
+    if (idx === editCoverIndex) {
+      const check = document.createElement('span');
+      check.className = 'photo-cover-check';
+      check.textContent = '✓';
+      wrap.appendChild(check);
+    }
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -1524,43 +1525,27 @@ function renderEditPhotoStrip() {
       const idxNow = Number(wrap.dataset.index);
       const [removed] = editPhotoItems.splice(idxNow, 1);
       if (removed?.type === 'new' && removed.url) URL.revokeObjectURL(removed.url);
+      if (idxNow === editCoverIndex) editCoverIndex = 0;
+      else if (idxNow < editCoverIndex) editCoverIndex -= 1;
       renderEditPhotoStrip();
     });
     wrap.appendChild(removeBtn);
 
-    if (idx === 0) {
-      const badge = document.createElement('span');
-      badge.className = 'photo-cover-badge';
-      badge.textContent = 'Корица';
-      wrap.appendChild(badge);
-    }
+    const coverLabel = document.createElement('label');
+    coverLabel.className = 'photo-cover-radio-label';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'edit-cover-photo';
+    radio.className = 'photo-cover-radio';
+    radio.checked = idx === editCoverIndex;
+    radio.addEventListener('change', () => {
+      editCoverIndex = Number(wrap.dataset.index);
+      renderEditPhotoStrip();
+    });
+    coverLabel.append(radio, document.createTextNode(' Корица'));
+    wrap.appendChild(coverLabel);
 
     editPhotoStripEl.appendChild(wrap);
-  });
-}
-
-// SortableJS instance for the edit-photo strip. Bound once per edit session
-// (enterEditMode) to the strip container; the container element itself
-// never changes across re-renders, so the same instance keeps working even
-// though renderEditPhotoStrip() rebuilds its children.
-let editPhotoSortable = null;
-
-function initEditPhotoSortable() {
-  if (typeof Sortable === 'undefined' || !editPhotoStripEl) return;
-  if (editPhotoSortable) {
-    editPhotoSortable.destroy();
-    editPhotoSortable = null;
-  }
-  editPhotoSortable = Sortable.create(editPhotoStripEl, {
-    animation: 150,
-    handle: '.drag-handle',
-    ghostClass: 'photo-ghost',
-    onEnd: (evt) => {
-      if (evt.oldIndex === evt.newIndex || evt.oldIndex == null || evt.newIndex == null) return;
-      const [moved] = editPhotoItems.splice(evt.oldIndex, 1);
-      editPhotoItems.splice(evt.newIndex, 0, moved);
-      renderEditPhotoStrip();
-    },
   });
 }
 
@@ -1592,16 +1577,17 @@ function enterEditMode() {
   renderEditLocationFields();
 
   // Build the photo strip from existing photos, in their saved order.
-  // New files added via the file input get appended and can be dragged
-  // to any position (reordering handled by SortableJS, see initEditPhotoSortable).
+  // New files added via the file input get appended. The first photo
+  // (position 0, since memory.mediaPaths is already sorted by position)
+  // starts selected as the cover; the user can change it via radio button.
   revokeEditPhotoBlobUrls();
   editPhotoItems = (memory.mediaPaths || []).map((path, i) => ({
     type: 'existing',
     path,
     url: memory.mediaDataUrls[i],
   }));
+  editCoverIndex = 0;
   renderEditPhotoStrip();
-  initEditPhotoSortable();
   editMediaInput.value = '';
 
   detailView.classList.add('hidden');
@@ -1697,10 +1683,17 @@ detailEditForm.addEventListener('submit', async (event) => {
     if (delStorageErr) console.error('Storage remove error:', delStorageErr);
   }
 
-  // Persist the strip's current order: update position for kept existing
-  // photos, then upload new photos using their position in that same order.
-  for (let i = 0; i < editPhotoItems.length; i++) {
-    const item = editPhotoItems[i];
+  // The selected cover photo gets position 0; everything else keeps its
+  // original relative order and gets position 1, 2, 3...
+  const orderedPhotoItems = [
+    editPhotoItems[editCoverIndex],
+    ...editPhotoItems.filter((_, i) => i !== editCoverIndex),
+  ].filter(Boolean);
+
+  // Update position for kept existing photos, then upload new photos using
+  // their position in that same cover-first order.
+  for (let i = 0; i < orderedPhotoItems.length; i++) {
+    const item = orderedPhotoItems[i];
     if (item.type === 'existing') {
       const { error: posErr } = await sb.from('memory_media').update({ position: i }).eq('storage_path', item.path).eq('memory_id', memoryId);
       if (posErr) console.error('memory_media position update error:', posErr);
@@ -1718,7 +1711,7 @@ detailEditForm.addEventListener('submit', async (event) => {
   if (refetchErr) console.error('Memory re-fetch error:', refetchErr);
   const idx = appState.memories.findIndex((m) => m.createdAt === memoryId);
   if (idx !== -1) {
-    const finalMedia = editPhotoItems
+    const finalMedia = orderedPhotoItems
       .map((item, i) => ({
         storage_path: item.type === 'existing' ? item.path : item.uploadedPath,
         position: i,
