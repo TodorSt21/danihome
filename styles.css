@@ -662,11 +662,30 @@ button.tiny {
 
 .photo-thumb-wrap {
   position: relative;
-  display: block;
+  display: grid;
+  gap: 4px;
 }
 
-.photo-ghost {
-  opacity: 0.4;
+.media-preview-item.is-cover {
+  border: 2px solid var(--primary);
+}
+
+.photo-cover-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .photo-remove-btn {
@@ -693,43 +712,26 @@ button.tiny {
   background: rgba(220, 38, 38, 0.85);
 }
 
-.photo-drag-handle {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
+.photo-cover-radio-label {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.photo-cover-radio {
+  width: 14px;
+  height: 14px;
+  margin: 0;
   padding: 0;
-  font-size: 0.85rem;
-  line-height: 1;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  z-index: 1;
-}
-
-.photo-drag-handle:active {
-  cursor: grabbing;
-}
-
-.photo-cover-badge {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
-  background: rgba(43, 176, 160, 0.75);
-  color: #fff;
-  font-size: 0.55rem;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 999px;
-  pointer-events: none;
-  z-index: 1;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  accent-color: var(--primary);
+  cursor: pointer;
 }
 
 /* ── FAB ────────────────────────────────────────────────────────── */
