@@ -40,7 +40,6 @@ const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
 
-const quickMemoryBtn = document.querySelector('#quick-memory-btn');
 const quickMemoryModal = document.querySelector('#quick-memory-modal');
 const quickMemoryClose = document.querySelector('#quick-memory-close');
 const quickMemoryForm = document.querySelector('#quick-memory-form');
@@ -2186,7 +2185,6 @@ function closeQuickMemoryModal() {
   quickMemoryPhotoName.textContent = '';
 }
 
-quickMemoryBtn.addEventListener('click', openQuickMemoryModal);
 quickMemoryClose.addEventListener('click', closeQuickMemoryModal);
 quickMemoryModal.addEventListener('click', (e) => {
   if (e.target === quickMemoryModal) closeQuickMemoryModal();
