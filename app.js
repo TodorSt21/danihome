@@ -42,6 +42,16 @@ const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
 
+const quickMemoryBtn = document.querySelector('#quick-memory-btn');
+const quickMemoryModal = document.querySelector('#quick-memory-modal');
+const quickMemoryClose = document.querySelector('#quick-memory-close');
+const quickMemoryForm = document.querySelector('#quick-memory-form');
+const quickMemoryText = document.querySelector('#quick-memory-text');
+const quickMemoryPhotoBtn = document.querySelector('#quick-memory-photo-btn');
+const quickMemoryPhotoInput = document.querySelector('#quick-memory-photo');
+const quickMemoryPhotoName = document.querySelector('#quick-memory-photo-name');
+const detailAddDetailsBtn = document.querySelector('#detail-add-details-btn');
+
 const memoryDetailEl = document.querySelector('#memory-detail');
 const detailBackBtn = document.querySelector('#detail-back-btn');
 const detailEditBtn = document.querySelector('#detail-edit-btn');
@@ -1295,9 +1305,24 @@ function renderMemoryDetail() {
     detailText.classList.add('hidden');
   }
 
+  // Quick memories are saved with only a date and a text/photo — offer a
+  // shortcut into the full edit form so the user can enrich them later.
+  if (detailAddDetailsBtn) {
+    detailAddDetailsBtn.classList.toggle('hidden', !memoryIsMinimal(memory));
+  }
+
   // Reset to view mode
   detailView.classList.remove('hidden');
   detailEdit.classList.add('hidden');
+}
+
+function memoryIsMinimal(memory) {
+  const hasTags = ['general', 'activity', 'emotion'].some((g) => (memory.tags?.[g] || []).length);
+  return !memory.location
+    && !memory.persons.length
+    && !memory.items.length
+    && !memory.notes
+    && !hasTags;
 }
 
 function initDetailStaticMap() {
@@ -1602,6 +1627,7 @@ function enterEditMode() {
 detailBackBtn.addEventListener('click', closeMemoryDetail);
 
 detailEditBtn.addEventListener('click', enterEditMode);
+if (detailAddDetailsBtn) detailAddDetailsBtn.addEventListener('click', enterEditMode);
 
 editClearPinBtn.addEventListener('click', () => {
   editLocationFields = [emptyLocationField()];
@@ -2121,6 +2147,91 @@ memoryForm.addEventListener('submit', async (event) => {
   document.querySelector('#memory-event-date').value = new Date().toISOString().slice(0, 10);
   submitBtn.disabled = false;
   submitBtn.textContent = 'Запази спомен';
+});
+
+// ── Quick memory ──────────────────────────────────────────────────────
+
+function openQuickMemoryModal() {
+  quickMemoryForm.reset();
+  quickMemoryPhotoName.textContent = '';
+  quickMemoryModal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => quickMemoryText.focus(), 50);
+}
+
+function closeQuickMemoryModal() {
+  quickMemoryModal.classList.add('hidden');
+  document.body.style.overflow = '';
+  quickMemoryForm.reset();
+  quickMemoryPhotoName.textContent = '';
+}
+
+quickMemoryBtn.addEventListener('click', openQuickMemoryModal);
+quickMemoryClose.addEventListener('click', closeQuickMemoryModal);
+quickMemoryModal.addEventListener('click', (e) => {
+  if (e.target === quickMemoryModal) closeQuickMemoryModal();
+});
+
+quickMemoryPhotoBtn.addEventListener('click', () => quickMemoryPhotoInput.click());
+quickMemoryPhotoInput.addEventListener('change', () => {
+  const file = quickMemoryPhotoInput.files[0];
+  quickMemoryPhotoName.textContent = file ? file.name : '';
+});
+
+quickMemoryForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  if (!appState.userId) {
+    alert('Не сте влезли в профила си.');
+    return;
+  }
+
+  const text = quickMemoryText.value.trim();
+  const file = quickMemoryPhotoInput.files[0];
+  if (!text && !file) return;
+
+  const submitBtn = quickMemoryForm.querySelector('[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Запазване…';
+
+  const { data: inserted, error } = await sb.from('memories').insert({
+    user_id: appState.userId,
+    title: '',
+    text,
+    event_date: new Date().toISOString().slice(0, 10),
+    person: '',
+    item: '',
+    location: '',
+    notes: '',
+    tags: { general: [], activity: [], emotion: [] },
+    pin: null,
+  }).select().single();
+
+  if (error) {
+    console.error('Quick memory insert error:', error);
+    alert(`Грешка при запазване: ${error.message}`);
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Запази';
+    return;
+  }
+
+  const memoryId = inserted.id;
+
+  if (file) {
+    try {
+      await uploadMemPhotoFile(file, appState.userId, memoryId, 0);
+    } catch (uploadErr) {
+      console.error('Quick memory photo upload error:', uploadErr);
+    }
+  }
+
+  const { data: fullRow } = await sb.from('memories').select('*, memory_media(*)').eq('id', memoryId).single();
+  appState.memories.unshift(mapMemory(fullRow ?? { ...inserted, memory_media: [] }));
+
+  render();
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Запази';
+  closeQuickMemoryModal();
 });
 
 // ── Lightbox ────────────────────────────────────────────────────────
