@@ -734,6 +734,103 @@ button.tiny {
   cursor: pointer;
 }
 
+/* ── QUICK MEMORY ───────────────────────────────────────────────── */
+
+.btn-quick-memory {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #3ECab8, #2BB0A0);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(43, 176, 160, 0.38);
+  cursor: pointer;
+}
+
+.btn-quick-memory:active {
+  transform: scale(0.98);
+}
+
+.quick-memory-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.quick-memory-modal.hidden {
+  display: none !important;
+}
+
+.quick-memory-card {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  background: var(--surface, #fff);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: slideInUp 0.2s ease;
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.quick-memory-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--background, #FBF8F3);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.quick-memory-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.quick-memory-textarea {
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.quick-memory-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quick-memory-photo-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-add-details-btn {
+  margin-top: 12px;
+}
+
 /* ── FAB ────────────────────────────────────────────────────────── */
 
 .fab {
