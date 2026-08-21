@@ -516,19 +516,101 @@ button.tiny {
 }
 
 .on-this-day-card {
-  border-left: 3px solid var(--primary);
+  background: linear-gradient(160deg, #FFF8EC, #FBF0DC);
+  border: 1px solid rgba(201, 146, 62, 0.22);
 }
 
-.on-this-day-year {
+.on-this-day-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.on-this-day-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+  margin: 4px -2px -2px;
+}
+
+.on-this-day-photo-card {
+  position: relative;
+  flex: 0 0 72%;
+  scroll-snap-align: start;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.on-this-day-photo-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.05) 55%, transparent 100%);
+}
+
+.on-this-day-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
   display: inline-block;
-  background: linear-gradient(135deg, #3ECab8, #2BB0A0);
+  background: linear-gradient(135deg, #D9A24E, #C9923E);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
-  margin-bottom: 4px;
   font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+.on-this-day-info {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 1;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.on-this-day-info strong {
+  font-size: 0.98rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.on-this-day-info small {
+  opacity: 0.92;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.on-this-day-empty {
+  text-align: center;
+  padding: 18px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.on-this-day-empty p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.on-this-day-empty .btn-quick-memory {
+  max-width: 260px;
 }
 
 .btn-delete-memory {

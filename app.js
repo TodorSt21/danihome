@@ -35,9 +35,7 @@ let searchQuery = '';
 let detailReturnTab = 'timeline';
 const statsGrid = document.querySelector('#stats-grid');
 const homeRecentList = document.querySelector('#home-recent-list');
-const onThisDayCard = document.querySelector('#on-this-day-card');
-const onThisDaySubtitle = document.querySelector('#on-this-day-subtitle');
-const onThisDayList = document.querySelector('#on-this-day-list');
+const onThisDayBody = document.querySelector('#on-this-day-body');
 const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
@@ -607,7 +605,14 @@ function renderHomeSummary() {
   }
 }
 
+function yearsAgoLabel(years) {
+  if (years === 1) return 'преди 1 година';
+  return `преди ${years} години`;
+}
+
 function renderOnThisDay() {
+  if (!onThisDayBody) return;
+
   const today = new Date();
   const todayMonth = today.getMonth();
   const todayDay = today.getDate();
@@ -618,39 +623,54 @@ function renderOnThisDay() {
     return d.getMonth() === todayMonth && d.getDate() === todayDay && d.getFullYear() < thisYear;
   }).sort((a, b) => toEventDateTimestamp(b) - toEventDateTimestamp(a));
 
+  onThisDayBody.innerHTML = '';
+
   if (!matches.length) {
-    onThisDayCard.classList.add('hidden');
+    const empty = document.createElement('div');
+    empty.className = 'on-this-day-empty';
+    const msg = document.createElement('p');
+    msg.textContent = 'Днес още няма спомен от миналото. Създай един за бъдещето.';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-quick-memory';
+    btn.textContent = '⚡ Бърз спомен';
+    btn.addEventListener('click', openQuickMemoryModal);
+    empty.append(msg, btn);
+    onThisDayBody.appendChild(empty);
     return;
   }
 
-  onThisDayCard.classList.remove('hidden');
-  onThisDaySubtitle.textContent =
-    today.toLocaleDateString('bg-BG', { day: 'numeric', month: 'long' }) + ' в предишни години';
+  const scroll = document.createElement('div');
+  scroll.className = 'on-this-day-scroll';
 
-  onThisDayList.innerHTML = '';
   matches.forEach((memory) => {
     const year = new Date(memory.eventDate).getFullYear();
-    const li = document.createElement('li');
-    li.className = 'memory-item memory-card';
-    li.style.cursor = 'pointer';
-    const img = document.createElement('img');
-    img.className = 'memory-photo';
-    img.src = getMemoryCover(memory);
-    img.alt = '';
-    const body = document.createElement('div');
-    body.className = 'memory-card-body';
-    const yearSpan = document.createElement('span');
-    yearSpan.className = 'on-this-day-year';
-    yearSpan.textContent = String(year);
-    const strong = document.createElement('strong');
-    strong.textContent = (memory.title || memory.text).slice(0, 60);
-    const small = document.createElement('small');
-    if (memory.location) small.innerHTML = `${ICON.pin} ${escHtml(memory.location)}`;
-    body.append(yearSpan, strong, small);
-    li.append(img, body);
-    li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
-    onThisDayList.appendChild(li);
+    const card = document.createElement('article');
+    card.className = 'on-this-day-photo-card';
+    card.style.backgroundImage = `url("${getMemoryCover(memory)}")`;
+    card.style.cursor = 'pointer';
+
+    const badge = document.createElement('span');
+    badge.className = 'on-this-day-badge';
+    badge.textContent = yearsAgoLabel(thisYear - year);
+
+    const info = document.createElement('div');
+    info.className = 'on-this-day-info';
+    const title = document.createElement('strong');
+    title.textContent = (memory.title || memory.text).slice(0, 60);
+    info.appendChild(title);
+    if (memory.location) {
+      const loc = document.createElement('small');
+      loc.innerHTML = `${ICON.pin} ${escHtml(memory.location)}`;
+      info.appendChild(loc);
+    }
+
+    card.append(badge, info);
+    card.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'create-memory'));
+    scroll.appendChild(card);
   });
+
+  onThisDayBody.appendChild(scroll);
 }
 
 function renderMediaPreview() {
