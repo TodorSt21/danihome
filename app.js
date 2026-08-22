@@ -343,6 +343,9 @@ const ICON = {
   bag: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor" stroke="none"/></svg>`,
   heart: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`,
   target: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  star: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.5 15.1 9 22 10.1 17 15.1 18.2 22 12 18.7 5.8 22 7 15.1 2 10.1 8.9 9 12 2.5"/></svg>`,
+  calendar: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2.5"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>`,
+  mapPin: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
 };
 
 // --- Core functions ---
@@ -701,6 +704,28 @@ function computeMonthlyBuckets() {
   return buckets;
 }
 
+function buildMyLifeRow(iconSvg, value, label) {
+  const row = document.createElement('div');
+  row.className = 'my-life-row';
+
+  const icon = document.createElement('span');
+  icon.className = 'my-life-row-icon';
+  icon.innerHTML = iconSvg;
+
+  const text = document.createElement('div');
+  text.className = 'my-life-row-text';
+  const valueEl = document.createElement('strong');
+  valueEl.className = 'my-life-row-value';
+  valueEl.textContent = value;
+  const labelEl = document.createElement('small');
+  labelEl.className = 'my-life-row-label';
+  labelEl.textContent = label;
+  text.append(valueEl, labelEl);
+
+  row.append(icon, text);
+  return row;
+}
+
 function renderMyLife() {
   if (!myLifeBody) return;
   myLifeBody.innerHTML = '';
@@ -724,35 +749,24 @@ function renderMyLife() {
   const stats = document.createElement('div');
   stats.className = 'my-life-stats';
 
-  const totalRow = document.createElement('div');
-  totalRow.className = 'my-life-total';
-  const totalNumber = document.createElement('span');
-  totalNumber.className = 'my-life-total-number';
-  totalNumber.textContent = String(total);
-  const totalLabel = document.createElement('span');
-  totalLabel.className = 'my-life-total-label';
-  totalLabel.textContent = pluralMemories(total);
-  totalRow.append(totalNumber, totalLabel);
-  if (newThisYear > 0) {
-    const badge = document.createElement('span');
-    badge.className = 'my-life-badge-new';
-    badge.textContent = `+${newThisYear} тази година`;
-    totalRow.appendChild(badge);
-  }
-  stats.appendChild(totalRow);
+  stats.appendChild(buildMyLifeRow(
+    ICON.star,
+    `${total} ${pluralMemories(total)}`,
+    newThisYear > 0 ? `${newThisYear} нови тази година` : 'Всеки спомен е стъпка напред.',
+  ));
 
-  const yearsLine = document.createElement('p');
-  yearsLine.className = 'my-life-line';
-  yearsLine.textContent = minYear === maxYear
-    ? `Спомени през ${minYear} г.`
-    : `Спомени от ${minYear} до ${maxYear}`;
-  stats.appendChild(yearsLine);
+  stats.appendChild(buildMyLifeRow(
+    ICON.calendar,
+    minYear === maxYear ? String(minYear) : `${minYear}–${maxYear}`,
+    minYear === maxYear ? `Спомени през ${minYear} г.` : `Спомени от ${minYear} до ${maxYear}`,
+  ));
 
   if (topPlace && topPlace.count >= 2) {
-    const placeLine = document.createElement('p');
-    placeLine.className = 'my-life-line';
-    placeLine.textContent = `Най-често: ${topPlace.name} (${topPlace.count} ${pluralMemories(topPlace.count)})`;
-    stats.appendChild(placeLine);
+    stats.appendChild(buildMyLifeRow(
+      ICON.mapPin,
+      topPlace.name,
+      `Най-често: ${topPlace.name} (${topPlace.count} ${pluralMemories(topPlace.count)})`,
+    ));
   }
 
   myLifeBody.appendChild(stats);
@@ -766,8 +780,10 @@ function renderMyLife() {
       const bar = document.createElement('span');
       bar.className = 'my-life-bar';
       const ratio = maxCount ? bucket.count / maxCount : 0;
-      bar.style.height = `${4 + ratio * 26}px`;
-      bar.style.opacity = String(bucket.count ? 0.35 + ratio * 0.65 : 0.15);
+      bar.style.height = `${3 + ratio * 17}px`;
+      bar.style.background = bucket.count
+        ? `rgba(43, 176, 160, ${0.4 + ratio * 0.6})`
+        : 'rgba(43, 176, 160, 0.14)';
       timeline.appendChild(bar);
     });
     myLifeBody.appendChild(timeline);
