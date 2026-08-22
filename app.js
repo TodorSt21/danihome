@@ -36,6 +36,7 @@ let detailReturnTab = 'timeline';
 const statsGrid = document.querySelector('#stats-grid');
 const homeRecentList = document.querySelector('#home-recent-list');
 const onThisDayBody = document.querySelector('#on-this-day-body');
+const myLifeBody = document.querySelector('#my-life-body');
 const memoryMediaInput = document.querySelector('#memory-media');
 const memoryMediaPreview = document.querySelector('#memory-media-preview');
 const fabAddMemoryBtn = document.querySelector('#fab-add-memory');
@@ -672,6 +673,107 @@ function renderOnThisDay() {
   onThisDayBody.appendChild(scroll);
 }
 
+// Buckets memories by year-month (filling gaps with zero) so the timeline
+// bar shows real distribution across the whole span, not just active months.
+function computeMonthlyBuckets() {
+  const counts = new Map();
+  appState.memories.forEach((memory) => {
+    const d = new Date(memory.eventDate);
+    if (Number.isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  if (!counts.size) return [];
+
+  const keys = [...counts.keys()].sort();
+  const [firstYear, firstMonth] = keys[0].split('-').map(Number);
+  const [lastYear, lastMonth] = keys[keys.length - 1].split('-').map(Number);
+
+  const buckets = [];
+  let y = firstYear;
+  let m = firstMonth;
+  while (y < lastYear || (y === lastYear && m <= lastMonth)) {
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    buckets.push({ key, count: counts.get(key) || 0 });
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+  return buckets;
+}
+
+function renderMyLife() {
+  if (!myLifeBody) return;
+  myLifeBody.innerHTML = '';
+
+  const total = appState.memories.length;
+  if (!total) {
+    const empty = document.createElement('p');
+    empty.className = 'my-life-empty';
+    empty.textContent = 'Твоята карта на спомени тепърва започва.';
+    myLifeBody.appendChild(empty);
+    return;
+  }
+
+  const thisYear = new Date().getFullYear();
+  const years = appState.memories.map((m) => new Date(m.eventDate).getFullYear()).filter(Number.isFinite);
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+  const newThisYear = appState.memories.filter((m) => new Date(m.eventDate).getFullYear() === thisYear).length;
+  const topPlace = groupPinsByPlace()[0];
+
+  const stats = document.createElement('div');
+  stats.className = 'my-life-stats';
+
+  const totalRow = document.createElement('div');
+  totalRow.className = 'my-life-total';
+  const totalNumber = document.createElement('span');
+  totalNumber.className = 'my-life-total-number';
+  totalNumber.textContent = String(total);
+  const totalLabel = document.createElement('span');
+  totalLabel.className = 'my-life-total-label';
+  totalLabel.textContent = pluralMemories(total);
+  totalRow.append(totalNumber, totalLabel);
+  if (newThisYear > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'my-life-badge-new';
+    badge.textContent = `+${newThisYear} тази година`;
+    totalRow.appendChild(badge);
+  }
+  stats.appendChild(totalRow);
+
+  const yearsLine = document.createElement('p');
+  yearsLine.className = 'my-life-line';
+  yearsLine.textContent = minYear === maxYear
+    ? `Спомени през ${minYear} г.`
+    : `Спомени от ${minYear} до ${maxYear}`;
+  stats.appendChild(yearsLine);
+
+  if (topPlace && topPlace.count >= 2) {
+    const placeLine = document.createElement('p');
+    placeLine.className = 'my-life-line';
+    placeLine.textContent = `Най-често: ${topPlace.name} (${topPlace.count} ${pluralMemories(topPlace.count)})`;
+    stats.appendChild(placeLine);
+  }
+
+  myLifeBody.appendChild(stats);
+
+  const buckets = computeMonthlyBuckets();
+  if (buckets.length) {
+    const maxCount = Math.max(...buckets.map((b) => b.count));
+    const timeline = document.createElement('div');
+    timeline.className = 'my-life-timeline';
+    buckets.forEach((bucket) => {
+      const bar = document.createElement('span');
+      bar.className = 'my-life-bar';
+      const ratio = maxCount ? bucket.count / maxCount : 0;
+      bar.style.height = `${4 + ratio * 26}px`;
+      bar.style.opacity = String(bucket.count ? 0.35 + ratio * 0.65 : 0.15);
+      timeline.appendChild(bar);
+    });
+    myLifeBody.appendChild(timeline);
+  }
+}
+
 function renderMediaPreview() {
   if (!memoryMediaPreview || !memoryMediaInput) return;
   memoryMediaPreview.innerHTML = '';
@@ -849,6 +951,25 @@ function renderLocationPins() {
     : 'Няма избрани места.';
 }
 
+function pluralMemories(count) {
+  return count === 1 ? 'спомен' : 'спомена';
+}
+
+// Groups all named pins (falling back to the memory's location text) by
+// place so the same place is counted once instead of listed per-pin.
+function groupPinsByPlace() {
+  const flatPins = appState.memories.flatMap((memory) => memory.pins.map((pin) => ({ memory, pin })));
+  const groups = new Map();
+  flatPins.forEach(({ memory, pin }) => {
+    const name = (pin.name || memory.location || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { name, count: 0, memory });
+    groups.get(key).count += 1;
+  });
+  return [...groups.values()].sort((a, b) => b.count - a.count);
+}
+
 function renderMapPins() {
   mapPinsList.innerHTML = '';
   const flatPins = appState.memories.flatMap((memory) => memory.pins.map((pin) => ({ memory, pin })));
@@ -897,12 +1018,11 @@ function renderMapPins() {
     });
   }
 
-  flatPins.forEach(({ memory, pin }, index) => {
-    const pinTitle = pin.name || memory.location || (memory.title || memory.text).slice(0, 48);
+  groupPinsByPlace().forEach(({ name, count, memory }) => {
     const li = document.createElement('li');
     li.className = 'memory-item';
     li.style.cursor = 'pointer';
-    li.innerHTML = `${ICON.pin} Пин #${index + 1} — ${escHtml(pinTitle)}`;
+    li.innerHTML = `${ICON.pin} ${escHtml(name)} · ${count} ${pluralMemories(count)}`;
     li.addEventListener('click', () => openMemoryDetail(memory.createdAt, 'map'));
     mapPinsList.appendChild(li);
   });
@@ -1184,6 +1304,7 @@ function render() {
   renderFilterState();
   renderHomeSummary();
   renderOnThisDay();
+  renderMyLife();
   renderTimeline();
   renderPeople();
   renderPersonDetail();
