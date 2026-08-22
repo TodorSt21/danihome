@@ -758,14 +758,14 @@ function renderMyLife() {
   stats.appendChild(buildMyLifeRow(
     ICON.calendar,
     minYear === maxYear ? String(minYear) : `${minYear}–${maxYear}`,
-    minYear === maxYear ? `Спомени през ${minYear} г.` : `Спомени от ${minYear} до ${maxYear}`,
+    minYear === maxYear ? 'Активна година' : 'Обхванати години',
   ));
 
   if (topPlace && topPlace.count >= 2) {
     stats.appendChild(buildMyLifeRow(
       ICON.mapPin,
       topPlace.name,
-      `Най-често: ${topPlace.name} (${topPlace.count} ${pluralMemories(topPlace.count)})`,
+      `Най-често посещавано (${topPlace.count} ${pluralMemories(topPlace.count)})`,
     ));
   }
 
